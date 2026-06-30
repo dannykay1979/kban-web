@@ -872,9 +872,15 @@ async function submitDaily() {
   const btn = document.getElementById('sub-btn');
   btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Submitting...';
   try {
-    const res = await fetch('/api/daily-ops', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
-    const json = await res.json();
-    if (!res.ok || !json.success) throw new Error(json.error||'Server error');
+    await sbFetch('daily_ops', {
+      method: 'POST',
+      body: JSON.stringify({
+        depot: data.depot, ops_date: data.ops_date, submitted_by: data.submitted_by||null,
+        bay_available: data.bay_available, bay_delay_notes: data.bay_delay_notes,
+        sortation_done: data.sortation_done, sortation_notes: data.sortation_notes,
+        drivers: data.drivers, other_notes: data.other_notes, plan_id: data.plan_id,
+      }),
+    });
     document.getElementById('screen-daily').style.display = 'none';
     document.getElementById('success').style.display = 'block';
     document.getElementById('s-title').textContent = 'Sheet Submitted';
@@ -884,8 +890,7 @@ async function submitDaily() {
       <strong>Submitted By</strong>${data.submitted_by}
       <strong>Drivers on Plan</strong>${data.drivers.filter(d=>!d.unplanned).length}
       <strong>No Shows</strong>${data.drivers.filter(d=>d.status==='absent').length}
-      <strong>Late</strong>${data.drivers.filter(d=>d.status==='late').length}
-      ${json.warning?`<div style="margin-top:8px;color:var(--amber)">⚠ ${json.warning}</div>`:''}`;
+      <strong>Late</strong>${data.drivers.filter(d=>d.status==='late').length}`;
     window.scrollTo({top:0,behavior:'smooth'});
   } catch(e) { showErr('Submission failed. ' + e.message); }
   finally { btn.disabled = false; btn.textContent = 'Submit Daily Ops Sheet'; }
