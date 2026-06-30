@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="KBAN"/>
+<title>KBAN Dashboard</title>
+<link rel="apple-touch-icon" sizes="180x180" href="/icon.png"/>
+<link rel="icon" href="/icon.png"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --navy:#0B2E4E;--blue:#2E83F0;--blue-dim:rgba(46,131,240,0.1);
+  --white:#fff;--off:#F5F7FA;--border:rgba(11,46,78,0.1);--border-lt:rgba(11,46,78,0.06);
+  --text:#0B2E4E;--text2:#5a7a96;--text3:#9ab0c4;
+  --danger:#e03e3e;--danger-bg:rgba(224,62,62,0.08);
+  --warn:#d97706;--warn-bg:rgba(217,119,6,0.08);
+  --ok:#059669;--ok-bg:rgba(5,150,105,0.08);
+  --r:10px;--rs:6px;--rf:999px;
+  --shadow:0 1px 3px rgba(11,46,78,0.07),0 4px 16px rgba(11,46,78,0.05);
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html{height:100%;}
+body{font-family:'IBM Plex Sans',sans-serif;background:var(--off);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;}
+
+/* HEADER */
+.hdr{background:var(--navy);padding:0 20px;padding-top:var(--safe-top);height:calc(56px + var(--safe-top));display:flex;align-items:flex-end;padding-bottom:10px;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.logo{display:flex;align-items:center;gap:10px;text-decoration:none;}
+.logo-mark{flex-shrink:0;}
+.logo-word{display:flex;flex-direction:column;gap:0px;}
+.logo-kban{font-family:'Archivo',sans-serif;font-weight:800;font-size:16px;color:#fff;letter-spacing:0.02em;line-height:1;}
+.logo-sub{font-family:'IBM Plex Sans',sans-serif;font-weight:400;font-size:9px;color:rgba(255,255,255,0.45);letter-spacing:0.12em;text-transform:uppercase;line-height:1;margin-top:2px;}
+.hdr-date{font-family:'IBM Plex Mono',monospace;font-size:10px;color:rgba(255,255,255,0.4);letter-spacing:0.04em;display:none;}
+.hdr-right{display:flex;gap:8px;align-items:center;}
+
+/* MOBILE TABS */
+.mobile-tabs{display:none;background:var(--white);border-bottom:1px solid var(--border-lt);padding:0 16px;}
+.mobile-tabs button{background:none;border:none;padding:12px 16px;font-size:13px;font-weight:500;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;font-family:'IBM Plex Sans',sans-serif;}
+.mobile-tabs button.active{color:var(--blue);border-bottom-color:var(--blue);}
+
+/* LAYOUT */
+.container{max-width:1280px;margin:0 auto;padding:20px;display:grid;grid-template-columns:1fr 400px;gap:20px;align-items:start;}
+
+/* CARDS */
+.card{background:var(--white);border-radius:var(--r);border:1px solid var(--border-lt);box-shadow:var(--shadow);}
+.card-head{padding:13px 16px;border-bottom:1px solid var(--border-lt);display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.card-title{font-family:'Archivo',sans-serif;font-weight:600;font-size:13px;color:var(--text);display:flex;align-items:center;gap:7px;}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Sans',sans-serif;font-size:13px;font-weight:500;padding:8px 14px;border-radius:var(--rs);border:none;cursor:pointer;transition:opacity .15s,transform .1s;white-space:nowrap;-webkit-appearance:none;}
+.btn:active{transform:scale(.98);opacity:.85;}
+.btn-primary{background:var(--blue);color:#fff;}
+.btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border);}
+.btn-ghost:hover{background:var(--off);}
+.btn-sm{font-size:12px;padding:6px 11px;}
+.btn-icon{background:none;border:none;cursor:pointer;color:var(--text3);padding:4px;border-radius:4px;display:inline-flex;align-items:center;}
+.btn-icon:active{color:var(--danger);}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;gap:3px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;padding:2px 7px;border-radius:var(--rf);white-space:nowrap;}
+.badge-high{background:var(--danger-bg);color:var(--danger);}
+.badge-normal{background:var(--border-lt);color:var(--text2);}
+.badge-over{background:var(--danger-bg);color:var(--danger);}
+.badge-today{background:var(--warn-bg);color:var(--warn);}
+.badge-soon{background:var(--blue-dim);color:var(--blue);}
+.badge-ok{background:var(--border-lt);color:var(--text3);}
+.badge-recur{background:var(--blue-dim);color:var(--blue);}
+
+/* STATS */
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;}
+.stat-card{background:var(--white);border:1px solid var(--border-lt);border-radius:var(--r);padding:12px 14px;box-shadow:var(--shadow);}
+.stat-val{font-family:'Archivo',sans-serif;font-weight:700;font-size:24px;color:var(--text);line-height:1;margin-bottom:2px;}
+.stat-val.danger{color:var(--danger);}
+.stat-lbl{font-size:11px;color:var(--text2);}
+
+/* CAL STRIP */
+.cal{background:var(--navy);border-radius:var(--r);padding:12px 14px;margin-bottom:14px;}
+.cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.cal-lbl{font-family:'IBM Plex Mono',monospace;font-size:10px;color:rgba(255,255,255,0.4);letter-spacing:.06em;text-transform:uppercase;}
+.cal-refresh{background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.3);padding:2px;border-radius:4px;display:inline-flex;align-items:center;}
+.cal-refresh:hover{color:rgba(255,255,255,0.6);}
+.cal-day{margin-bottom:8px;}
+.cal-day:last-child{margin-bottom:0;}
+.cal-day-lbl{font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(255,255,255,0.3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px;}
+.cal-events{display:flex;gap:6px;flex-wrap:wrap;}
+.cal-ev{background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);border-radius:var(--rs);padding:5px 10px;font-size:12px;color:rgba(255,255,255,0.85);display:flex;flex-direction:column;gap:2px;min-width:0;}
+.cal-ev-t{color:rgba(255,255,255,0.45);font-family:'IBM Plex Mono',monospace;font-size:10px;}
+.cal-ev-loc{color:rgba(255,255,255,0.3);font-size:10px;font-style:italic;}
+.cal-none{font-size:12px;color:rgba(255,255,255,0.3);font-style:italic;}
+
+/* FILTERS */
+.filters{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px;align-items:center;}
+.fl{font-size:12px;color:var(--text3);margin-right:2px;}
+.pill{font-size:12px;padding:5px 11px;border-radius:var(--rf);border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;}
+.pill.on{background:var(--navy);color:#fff;border-color:var(--navy);}
+
+/* SECTIONS */
+.section{border:1px solid var(--border-lt);border-radius:var(--r);overflow:hidden;margin-bottom:10px;box-shadow:var(--shadow);}
+.section:last-child{margin-bottom:0;}
+.sec-head{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--off);cursor:pointer;user-select:none;border-bottom:1px solid var(--border-lt);min-height:44px;}
+.sec-head-l{display:flex;align-items:center;gap:8px;font-family:'Archivo',sans-serif;font-size:13px;font-weight:600;color:var(--text);}
+.sec-count{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text3);background:var(--white);border:1px solid var(--border);border-radius:var(--rf);padding:2px 7px;}
+.chev{color:var(--text3);transition:transform .2s;flex-shrink:0;}
+.chev.open{transform:rotate(180deg);}
+
+/* TASKS */
+.task-list{background:var(--white);}
+.task-row{display:flex;align-items:flex-start;gap:10px;padding:11px 14px;border-bottom:1px solid var(--border-lt);min-height:44px;}
+.task-row:last-of-type{border-bottom:none;}
+.task-row.done{opacity:.4;}
+.task-ck{width:18px;height:18px;border-radius:4px;border:1.5px solid var(--border);cursor:pointer;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;}
+.task-ck.on{background:var(--ok);border-color:var(--ok);}
+.task-ck.on::after{content:'';width:9px;height:6px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg) translateY(-1px);display:block;}
+.task-main{flex:1;min-width:0;cursor:pointer;}
+.task-main:hover .task-title{color:var(--blue);}
+.task-title{font-size:13px;color:var(--text);font-weight:500;line-height:1.4;word-break:break-word;white-space:normal;transition:color .15s;}
+.task-row.done .task-title{text-decoration:line-through;color:var(--text3);}
+.task-note{font-size:11px;color:var(--text2);margin-top:3px;line-height:1.4;word-break:break-word;white-space:normal;}
+.task-meta{display:flex;align-items:flex-start;gap:4px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:130px;}
+
+/* ADD TASK */
+.add-btn{width:100%;padding:11px 14px;background:none;border:none;border-top:1px solid var(--border-lt);cursor:pointer;text-align:left;font-size:13px;color:var(--text3);display:flex;align-items:center;gap:6px;font-family:'IBM Plex Sans',sans-serif;min-height:44px;}
+.add-form{display:none;padding:14px;background:var(--off);border-top:1px solid var(--border-lt);flex-direction:column;gap:10px;}
+.add-form.open{display:flex;}
+.form-row{display:flex;gap:8px;flex-wrap:wrap;}
+.fi{flex:1;min-width:0;width:100%;padding:9px 10px;font-size:14px;border:1px solid var(--border);border-radius:var(--rs);background:#fff;color:var(--text);font-family:'IBM Plex Sans',sans-serif;-webkit-appearance:none;}
+.fi:focus{outline:none;border-color:var(--blue);}
+.fs{width:100%;padding:9px 10px;font-size:14px;border:1px solid var(--border);border-radius:var(--rs);background:#fff;color:var(--text);font-family:'IBM Plex Sans',sans-serif;-webkit-appearance:none;}
+.fs:focus{outline:none;border-color:var(--blue);}
+.fd{width:100%;padding:9px 10px;font-size:14px;border:1px solid var(--border);border-radius:var(--rs);background:#fff;color:var(--text);font-family:'IBM Plex Mono',monospace;-webkit-appearance:none;}
+.fd:focus{outline:none;border-color:var(--blue);}
+.fta{width:100%;padding:9px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--rs);background:#fff;color:var(--text);font-family:'IBM Plex Sans',sans-serif;resize:vertical;min-height:44px;-webkit-appearance:none;}
+.fta:focus{outline:none;border-color:var(--blue);}
+.recur-row{display:flex;align-items:center;gap:10px;}
+.recur-lbl{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);cursor:pointer;}
+.recur-lbl input{width:18px;height:18px;cursor:pointer;}
+.form-btns{display:flex;gap:8px;}
+.form-btns .btn{flex:1;justify-content:center;}
+.empty{padding:14px;font-size:13px;color:var(--text3);font-style:italic;}
+
+/* EDIT MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(11,46,78,0.4);z-index:200;align-items:center;justify-content:center;padding:20px;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--white);border-radius:var(--r);box-shadow:0 8px 40px rgba(11,46,78,0.2);width:100%;max-width:480px;overflow:hidden;}
+.modal-head{padding:14px 16px;border-bottom:1px solid var(--border-lt);display:flex;align-items:center;justify-content:space-between;}
+.modal-title{font-family:'Archivo',sans-serif;font-weight:600;font-size:14px;color:var(--text);}
+.modal-body{padding:16px;display:flex;flex-direction:column;gap:12px;}
+.modal-label{font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;}
+.modal-foot{padding:12px 16px;border-top:1px solid var(--border-lt);display:flex;gap:8px;}
+.modal-foot .btn{flex:1;justify-content:center;}
+
+/* BRIEF PANEL */
+.brief-panel{position:sticky;top:70px;}
+.brief-status{font-size:11px;color:var(--text3);font-family:'IBM Plex Mono',monospace;}
+.brief-body{padding:16px;font-size:13px;line-height:1.7;color:var(--text);white-space:pre-wrap;max-height:70vh;overflow-y:auto;}
+.brief-placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:180px;gap:12px;color:var(--text3);text-align:center;padding:24px 16px;}
+.brief-placeholder strong{display:block;color:var(--text2);font-size:13px;margin-bottom:3px;}
+.brief-placeholder p{font-size:12px;line-height:1.6;}
+.brief-loading{display:flex;align-items:center;gap:10px;padding:20px 16px;font-size:13px;color:var(--text2);}
+.spinner{width:15px;height:15px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* MOBILE BRIEF BUTTON - floating */
+.fab{display:none;position:fixed;bottom:calc(20px + var(--safe-bottom));right:20px;z-index:50;background:var(--blue);color:#fff;border:none;border-radius:var(--rf);padding:13px 20px;font-size:14px;font-weight:600;font-family:'IBM Plex Sans',sans-serif;box-shadow:0 4px 20px rgba(46,131,240,0.4);cursor:pointer;align-items:center;gap:8px;}
+
+/* TOAST */
+.toast{position:fixed;bottom:calc(80px + var(--safe-bottom));left:50%;transform:translateX(-50%) translateY(40px);background:var(--navy);color:#fff;padding:10px 18px;border-radius:var(--rf);font-size:13px;z-index:300;opacity:0;transition:all .3s;pointer-events:none;white-space:nowrap;}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1;}
+
+/* DESKTOP SHOW/HIDE */
+.desktop-brief-btn{display:flex;}
+
+/* ============ MOBILE BREAKPOINTS ============ */
+@media(max-width:700px){
+  .hdr{padding:0 16px;padding-top:var(--safe-top);height:calc(52px + var(--safe-top));}
+  .hdr-date{display:none;}
+  .mobile-tabs{display:flex;gap:0;}
+  .container{padding:12px;gap:12px;grid-template-columns:1fr;}
+  .stat-row{grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px;}
+  .stat-val{font-size:22px;}
+  .brief-panel{position:static;}
+  .brief-panel.hidden-mobile{display:none;}
+  .task-col.hidden-mobile{display:none;}
+  .fab{display:inline-flex;}
+  .desktop-brief-btn{display:none;}
+  .filters{gap:4px;}
+  .pill{font-size:11px;padding:5px 9px;}
+  .task-meta{max-width:110px;}
+  .brief-body{max-height:none;}
+  .form-row{flex-direction:column;}
+  .modal-overlay{align-items:flex-end;padding:0;}
+  .modal{border-radius:var(--r) var(--r) 0 0;max-width:100%;}
+}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <div style="display:flex;align-items:center;gap:10px;">
+    <a class="logo" href="/">
+      <svg class="logo-mark" width="32" height="32" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M18 15 L50 50 L18 85 L36 85 L68 50 L36 15 Z" fill="#2E83F0"/>
+        <path d="M42 15 L74 50 L42 85 L60 85 L92 50 L60 15 Z" fill="#2E83F0" opacity="0.45"/>
+      </svg>
+      <div class="logo-word">
+        <div class="logo-kban">KBAN</div>
+        <div class="logo-sub">Logistics</div>
+      </div>
+    </a>
+    <div class="hdr-date" id="hdr-date"></div>
+  </div>
+  <div class="hdr-right">
+    <button class="btn btn-primary btn-sm desktop-brief-btn" onclick="runBrief()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      Run brief
+    </button>
+  </div>
+</header>
+
+<nav class="mobile-tabs">
+  <button class="active" id="tab-tasks" onclick="showTab('tasks')">Tasks</button>
+  <button id="tab-brief" onclick="showTab('brief')">Brief</button>
+</nav>
+
+<div class="container">
+  <!-- LEFT: TASKS -->
+  <div class="task-col" id="task-col">
+    <div class="stat-row">
+      <div class="stat-card"><div class="stat-val" id="st-open">0</div><div class="stat-lbl">Open</div></div>
+      <div class="stat-card"><div class="stat-val danger" id="st-over">0</div><div class="stat-lbl">Overdue</div></div>
+      <div class="stat-card"><div class="stat-val" id="st-today">0</div><div class="stat-lbl">Due today</div></div>
+      <div class="stat-card"><div class="stat-val" id="st-done">0</div><div class="stat-lbl">Done</div></div>
+    </div>
+
+    <!-- CALENDAR PANEL -->
+    <div class="cal" id="cal">
+      <div class="cal-header">
+        <span class="cal-lbl">Calendar</span>
+        <button class="cal-refresh" onclick="loadCal()" title="Refresh">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        </button>
+      </div>
+      <div id="cal-today-wrap" class="cal-day">
+        <div class="cal-day-lbl">Today</div>
+        <div class="cal-events" id="cal-today"><div class="cal-none">Loading...</div></div>
+      </div>
+      <div id="cal-tomorrow-wrap" class="cal-day">
+        <div class="cal-day-lbl">Tomorrow</div>
+        <div class="cal-events" id="cal-tomorrow"><div class="cal-none">Loading...</div></div>
+      </div>
+    </div>
+
+    <div class="filters">
+      <span class="fl">Show:</span>
+      <button class="pill on" onclick="setF('all',this)">All</button>
+      <button class="pill" onclick="setF('open',this)">Open</button>
+      <button class="pill" onclick="setF('high',this)">High</button>
+      <button class="pill" onclick="setF('overdue',this)">Overdue</button>
+      <button class="pill" onclick="setF('done',this)">Done</button>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+      <button class="btn btn-ghost btn-sm" onclick="clearDone()">Clear completed</button>
+    </div>
+
+    <div id="sections"></div>
+  </div>
+
+  <!-- RIGHT: BRIEF -->
+  <div class="brief-panel hidden-mobile" id="brief-col">
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Morning brief
+        </div>
+        <div class="brief-status" id="brief-status">Not yet run</div>
+      </div>
+      <div id="brief-out">
+        <div class="brief-placeholder">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ab0c4" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <div><strong>Ready when you are</strong><p>Press "Run brief" to generate your morning summary.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MOBILE FAB -->
+<button class="fab" onclick="runBrief();showTab('brief')">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+  Run brief
+</button>
+
+<!-- EDIT TASK MODAL -->
+<div class="modal-overlay" id="edit-modal" onclick="closeEditModal(event)">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Edit task</div>
+      <button class="btn-icon" onclick="closeEditModalDirect()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div>
+        <div class="modal-label">Title</div>
+        <input class="fi" type="text" id="edit-title" placeholder="Task title"/>
+      </div>
+      <div class="form-row">
+        <div style="flex:1;">
+          <div class="modal-label">Priority</div>
+          <select class="fs" id="edit-priority"><option value="normal">Normal priority</option><option value="high">High priority</option></select>
+        </div>
+        <div style="flex:1;">
+          <div class="modal-label">Due date</div>
+          <input class="fd" type="date" id="edit-due"/>
+        </div>
+      </div>
+      <div>
+        <div class="modal-label">Notes</div>
+        <textarea class="fta" id="edit-note" placeholder="Add notes..." rows="3"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-primary" onclick="saveEdit()">Save changes</button>
+      <button class="btn btn-ghost" onclick="closeEditModalDirect()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CATS=[
+  {id:'finance',label:'Finance, cash flow and payroll'},
+  {id:'operations',label:'Operations'},
+  {id:'fleet',label:'Fleet'},
+  {id:'insurance',label:'Insurance'},
+  {id:'people',label:'People and management'},
+  {id:'drivers',label:'Driver workforce'},
+  {id:'systems',label:'Systems and tools'},
+  {id:'commercial',label:'Commercial and marketing'},
+  {id:'legal',label:'Legal'},
+];
+
+const DEF_TASKS=[
+  {id:'t1',cat:'finance',title:'New forecast',note:'Remove NL Commercials, add Paul salary, Andrew Runcorn impact',priority:'high',due:'2026-06-26',done:false,recur:null,doneAt:null},
+  {id:'t2',cat:'finance',title:'Budget v actual P&L',note:'Running comparison linked to payroll and depot costs',priority:'high',due:'2026-06-27',done:false,recur:null,doneAt:null},
+  {id:'t3',cat:'finance',title:'Invoice factoring quotes',note:'Get 2-3 quotes',priority:'normal',due:'2026-07-04',done:false,recur:null,doneAt:null},
+  {id:'t4',cat:'finance',title:'VAT on hire charges',note:'Confirm with accountant',priority:'normal',due:'2026-07-01',done:false,recur:null,doneAt:null},
+  {id:'t5',cat:'finance',title:'DHL revenue vs P&L check',note:'Cross-reference charge statements',priority:'high',due:'2026-06-27',done:false,recur:null,doneAt:null},
+  {id:'t6',cat:'operations',title:'DPD payment check sheet',note:'Missing payments and multi-ID anomalies',priority:'high',due:'2026-06-25',done:false,recur:null,doneAt:null},
+  {id:'t7',cat:'operations',title:'Align payroll to client pay days',note:'Map DHL and DPD payment dates',priority:'normal',due:'2026-07-07',done:false,recur:null,doneAt:null},
+  {id:'t8',cat:'operations',title:'Actual vs plan ops form',note:'Daily/weekly declaration for Wayne and Jack',priority:'normal',due:'2026-07-01',done:false,recur:null,doneAt:null},
+  {id:'t9',cat:'operations',title:'Fuel analysis',note:'Full cost analysis by depot and driver',priority:'normal',due:'2026-07-04',done:false,recur:null,doneAt:null},
+  {id:'t10',cat:'operations',title:'Jack school and PGL dates',note:'Confirm and flag on ops calendar',priority:'high',due:'2026-06-25',done:false,recur:null,doneAt:null},
+  {id:'t11',cat:'fleet',title:'MVR rental deal review at 6 months',note:'Check rates and personal guarantee removal',priority:'normal',due:'2026-07-10',done:false,recur:null,doneAt:null},
+  {id:'t12',cat:'fleet',title:'MVR deposits overcharge check',note:'Audit deposit schedule vs DD references',priority:'high',due:'2026-06-26',done:false,recur:null,doneAt:null},
+  {id:'t13',cat:'fleet',title:'Fleet repayment plans',note:'Document each vehicle commitment',priority:'normal',due:'2026-07-04',done:false,recur:null,doneAt:null},
+  {id:'t14',cat:'fleet',title:'Fleet and costs meeting agenda',note:'Standing weekly agenda',priority:'normal',due:'2026-07-07',done:false,recur:'weekly',doneAt:null},
+  {id:'t15',cat:'insurance',title:'Insurance RFI / invitation to tender',note:'Issue RFI to brokers',priority:'normal',due:'2026-07-07',done:false,recur:null,doneAt:null},
+  {id:'t16',cat:'people',title:'Email Junior and Lloyd',note:'Draft and send',priority:'high',due:'2026-06-25',done:false,recur:null,doneAt:null},
+  {id:'t17',cat:'people',title:'Catch up with Paul Roberts',note:'Schedule call',priority:'normal',due:'2026-07-01',done:false,recur:null,doneAt:null},
+  {id:'t18',cat:'people',title:'Add Paul salary to forecasts and cashflow',note:'Fixed monthly cost',priority:'high',due:'2026-06-26',done:false,recur:null,doneAt:null},
+  {id:'t19',cat:'people',title:'Impact of Andrew in Runcorn',note:'PAYE vs SE cost comparison',priority:'normal',due:'2026-07-01',done:false,recur:null,doneAt:null},
+  {id:'t20',cat:'people',title:'Lloyd and Junior — move to 4-weekly payroll',note:'Align PAYE staff pay cycle to DHL schedule',priority:'high',due:'2026-06-26',done:false,recur:null,doneAt:null},
+  {id:'t21',cat:'drivers',title:'Cost analysis: pay rate vs revenue',note:'Model parcel volume vs drop rate',priority:'normal',due:'2026-07-07',done:false,recur:null,doneAt:null},
+  {id:'t22',cat:'systems',title:'Business dashboard for Danny and Wayne',note:'Single-view revenue, fleet, drivers, cash',priority:'normal',due:'2026-07-14',done:false,recur:null,doneAt:null},
+  {id:'t23',cat:'systems',title:'DHL charge statements process',note:'Structured reconciliation process each period',priority:'normal',due:'2026-07-01',done:false,recur:null,doneAt:null},
+  {id:'t24',cat:'systems',title:'Share drive cleanse',note:'Implement 8-category folder structure',priority:'normal',due:'2026-07-14',done:false,recur:null,doneAt:null},
+  {id:'t25',cat:'commercial',title:'Call Scott Mooney at FedEx Boynton',note:'FedEx pipeline call',priority:'high',due:'2026-06-25',done:false,recur:null,doneAt:null},
+  {id:'t26',cat:'commercial',title:'Website: last mile, first class',note:'Brief the build',priority:'normal',due:'2026-07-21',done:false,recur:null,doneAt:null},
+  {id:'t27',cat:'drivers',title:'Rewrite driver recruitment ads',note:'Run current ads through Claude to create improved versions — better tone, reach, and conversion',priority:'normal',due:'2026-07-07',done:false,recur:null,doneAt:null},
+];
+
+const API='/api/tasks';
+let tasks=[], filt='all', col={}, editingId=null;
+
+function td(){return new Date().toISOString().split('T')[0];}
+
+async function init(){
+  setDate();loadCal();
+  try{
+    const resp=await fetch(API);
+    if(!resp.ok) throw new Error('API error');
+    const data=await resp.json();
+    tasks=data.map(t=>({id:t.id,cat:t.cat,title:t.title,note:t.note||'',priority:t.priority,due:t.due||null,done:t.done,recur:t.recur||null,doneAt:t.done_at||null}));
+    if(tasks.length===0){
+      tasks=JSON.parse(JSON.stringify(DEF_TASKS));
+      await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bulk:true,tasks})});
+    }
+  } catch(e){
+    console.error('Supabase load failed, using defaults',e);
+    tasks=JSON.parse(JSON.stringify(DEF_TASKS));
+  }
+  render();
+  if(new URLSearchParams(window.location.search).get('autobrief')==='1') runBrief();
+}
+
+function setDate(){
+  const d=new Date();
+  const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  document.getElementById('hdr-date').textContent=`${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+async function loadCal(){
+  const todayEl=document.getElementById('cal-today');
+  const tomorrowEl=document.getElementById('cal-tomorrow');
+  todayEl.innerHTML='<div class="cal-none">Loading...</div>';
+  tomorrowEl.innerHTML='<div class="cal-none">Loading...</div>';
+  try{
+    const resp=await fetch('/api/calendar');
+    if(!resp.ok) throw new Error('Calendar API error');
+    const data=await resp.json();
+    renderCalDay(todayEl, data.today);
+    renderCalDay(tomorrowEl, data.tomorrow);
+  } catch(e){
+    todayEl.innerHTML='<div class="cal-none">Unable to load calendar.</div>';
+    tomorrowEl.innerHTML='<div class="cal-none">Unable to load calendar.</div>';
+  }
+}
+
+function renderCalDay(el, events){
+  if(!events||events.length===0){
+    el.innerHTML='<div class="cal-none">No events.</div>';return;
+  }
+  el.innerHTML=events.map(ev=>{
+    const time=ev.time||'';
+    const loc=ev.location?`<div class="cal-ev-loc">${escHtml(ev.location)}</div>`:'';
+    return`<div class="cal-ev"><div class="cal-ev-t">${escHtml(time)}</div><div>${escHtml(ev.title)}</div>${loc}</div>`;
+  }).join('');
+}
+
+function showTab(tab){
+  const taskCol=document.getElementById('task-col');
+  const briefCol=document.getElementById('brief-col');
+  document.getElementById('tab-tasks').classList.toggle('active',tab==='tasks');
+  document.getElementById('tab-brief').classList.toggle('active',tab==='brief');
+  if(tab==='tasks'){taskCol.classList.remove('hidden-mobile');briefCol.classList.add('hidden-mobile');}
+  else{taskCol.classList.add('hidden-mobile');briefCol.classList.remove('hidden-mobile');}
+}
+
+function dueStatus(due,done){
+  if(!due||done)return null;
+  const t=td();
+  if(due<t)return'over';if(due===t)return'today';
+  const diff=Math.round((new Date(due)-new Date(t))/86400000);
+  return diff<=3?'soon':'ok';
+}
+
+function dueBadge(due,done){
+  if(!due||done)return'';
+  const s=dueStatus(due,done);
+  const f=new Date(due).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+  if(s==='over')return`<span class="badge badge-over">Overdue</span>`;
+  if(s==='today')return`<span class="badge badge-today">Today</span>`;
+  if(s==='soon')return`<span class="badge badge-soon">${f}</span>`;
+  return`<span class="badge badge-ok">${f}</span>`;
+}
+
+function recurBadge(r){
+  if(!r)return'';
+  return`<span class="badge badge-recur">↻</span>`;
+}
+
+function nextDue(due,recur){
+  if(!recur||!due)return due;
+  const d=new Date(due);const t=new Date(td());
+  while(d<=t){
+    if(recur==='daily')d.setDate(d.getDate()+1);
+    else if(recur==='weekly')d.setDate(d.getDate()+7);
+    else d.setMonth(d.getMonth()+1);
+  }
+  return d.toISOString().split('T')[0];
+}
+
+function filteredTasks(catId){
+  const t=td();
+  return tasks.filter(x=>{
+    if(x.cat!==catId)return false;
+    if(filt==='open')return!x.done;
+    if(filt==='high')return x.priority==='high'&&!x.done;
+    if(filt==='overdue')return!x.done&&x.due&&x.due<t;
+    if(filt==='done')return x.done;
+    return true;
+  });
+}
+
+function setF(f,el){
+  filt=f;
+  document.querySelectorAll('.pill').forEach(p=>p.classList.remove('on'));
+  el.classList.add('on');render();
+}
+
+function openEditModal(id){
+  const t=tasks.find(x=>x.id===id);if(!t)return;
+  editingId=id;
+  document.getElementById('edit-title').value=t.title;
+  document.getElementById('edit-priority').value=t.priority;
+  document.getElementById('edit-due').value=t.due||'';
+  document.getElementById('edit-note').value=t.note||'';
+  document.getElementById('edit-modal').classList.add('open');
+  setTimeout(()=>document.getElementById('edit-title').focus(),50);
+}
+
+function closeEditModal(e){
+  if(e.target===document.getElementById('edit-modal')) closeEditModalDirect();
+}
+
+function closeEditModalDirect(){
+  document.getElementById('edit-modal').classList.remove('open');
+  editingId=null;
+}
+
+async function saveEdit(){
+  if(!editingId)return;
+  const t=tasks.find(x=>x.id===editingId);if(!t)return;
+  t.title=document.getElementById('edit-title').value.trim()||t.title;
+  t.priority=document.getElementById('edit-priority').value;
+  t.due=document.getElementById('edit-due').value||null;
+  t.note=document.getElementById('edit-note').value.trim();
+  await fetch(API,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:editingId,title:t.title,priority:t.priority,due:t.due,note:t.note})});
+  closeEditModalDirect();
+  render();
+  toast('Task updated');
+}
+
+function render(){
+  const t=td();
+  const open=tasks.filter(x=>!x.done).length;
+  const over=tasks.filter(x=>!x.done&&x.due&&x.due<t).length;
+  const due=tasks.filter(x=>!x.done&&x.due===t).length;
+  const done=tasks.filter(x=>x.done).length;
+  document.getElementById('st-open').textContent=open;
+  document.getElementById('st-over').textContent=over;
+  document.getElementById('st-today').textContent=due;
+  document.getElementById('st-done').textContent=done;
+
+  const sec=document.getElementById('sections');sec.innerHTML='';
+  CATS.forEach(cat=>{
+    const ct=filteredTasks(cat.id);
+    const oc=tasks.filter(x=>x.cat===cat.id&&!x.done).length;
+    const isCol=col[cat.id];
+    const div=document.createElement('div');div.className='section';
+    const head=document.createElement('div');head.className='sec-head';
+    head.innerHTML=`<div class="sec-head-l">${cat.label}</div><div style="display:flex;align-items:center;gap:8px;"><span class="sec-count">${oc}</span><svg class="chev ${isCol?'':'open'}" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg></div>`;
+    head.onclick=()=>{col[cat.id]=!col[cat.id];render();};
+    div.appendChild(head);
+    if(!isCol){
+      const list=document.createElement('div');list.className='task-list';
+      if(!ct.length){list.innerHTML=`<div class="empty">No tasks${filt!=='all'?' matching this filter':''}.</div>`;}
+      else ct.forEach(task=>{
+        const row=document.createElement('div');row.className='task-row'+(task.done?' done':'');
+        row.innerHTML=`
+          <div class="task-ck ${task.done?'on':''}" onclick="toggleDone('${task.id}')"></div>
+          <div class="task-main" onclick="openEditModal('${task.id}')">
+            <div class="task-title">${escHtml(task.title)}</div>
+            ${task.note?`<div class="task-note">${escHtml(task.note)}</div>`:''}
+          </div>
+          <div class="task-meta">
+            <span class="badge ${task.priority==='high'?'badge-high':'badge-normal'}">${task.priority==='high'?'High':'—'}</span>
+            ${recurBadge(task.recur)}
+            ${dueBadge(task.due,task.done)}
+            <button class="btn-icon" onclick="deleteTask('${task.id}')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>`;
+        list.appendChild(row);
+      });
+      const addBtn=document.createElement('button');addBtn.className='add-btn';
+      addBtn.innerHTML=`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add task`;
+      addBtn.onclick=()=>toggleForm(cat.id);list.appendChild(addBtn);
+      const form=document.createElement('div');form.className='add-form';form.id=`form-${cat.id}`;
+      form.innerHTML=`
+        <input class="fi" type="text" id="ft-${cat.id}" placeholder="Task title"/>
+        <div class="form-row">
+          <select class="fs" id="fp-${cat.id}" style="flex:1;"><option value="normal">Normal priority</option><option value="high">High priority</option></select>
+          <input class="fd" type="date" id="fd-${cat.id}" value="${td()}" style="flex:1;"/>
+        </div>
+        <textarea class="fta" id="fn-${cat.id}" placeholder="Note (optional)" rows="2"></textarea>
+        <div class="recur-row">
+          <label class="recur-lbl"><input type="checkbox" id="frc-${cat.id}" onchange="toggleRecur('${cat.id}')"/> Recurring</label>
+          <select class="fs" id="frs-${cat.id}" style="display:none;flex:1;"><option value="daily">Daily</option><option value="weekly" selected>Weekly</option><option value="monthly">Monthly</option></select>
+        </div>
+        <div class="form-btns">
+          <button class="btn btn-primary" onclick="addTask('${cat.id}')">Add task</button>
+          <button class="btn btn-ghost" onclick="closeForm('${cat.id}')">Cancel</button>
+        </div>`;
+      list.appendChild(form);div.appendChild(list);
+    }
+    sec.appendChild(div);
+  });
+}
+
+async function toggleDone(id){
+  const t=tasks.find(x=>x.id===id);if(!t)return;
+  if(!t.done){
+    t.done=true;t.doneAt=td();
+    await fetch(API,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,done:true,doneAt:td()})});
+    if(t.recur&&typeof t.recur==='string'&&t.recur.length>0){
+      const newTask={id:'t'+Date.now(),cat:t.cat,title:t.title,note:t.note,priority:t.priority,due:nextDue(t.due,t.recur),done:false,recur:t.recur,doneAt:null};
+      tasks.push(newTask);
+      await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(newTask)});
+    }
+  } else {
+    t.done=false;t.doneAt=null;
+    await fetch(API,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,done:false,doneAt:null})});
+  }
+  render();
+}
+
+async function deleteTask(id){
+  tasks=tasks.filter(x=>x.id!==id);
+  await fetch(API,{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});
+  render();
+}
+
+async function clearDone(){
+  tasks=tasks.filter(t=>!t.done);
+  await fetch(API,{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({clearDone:true})});
+  render();toast('Completed tasks cleared');
+}
+
+function toggleForm(catId){
+  const f=document.getElementById(`form-${catId}`);
+  if(f){f.classList.toggle('open');if(f.classList.contains('open'))document.getElementById(`ft-${catId}`).focus();}
+}
+function closeForm(catId){const f=document.getElementById(`form-${catId}`);if(f)f.classList.remove('open');}
+function toggleRecur(catId){
+  const cb=document.getElementById(`frc-${catId}`);const sel=document.getElementById(`frs-${catId}`);
+  if(sel)sel.style.display=cb.checked?'block':'none';
+}
+
+async function addTask(catId){
+  const title=document.getElementById(`ft-${catId}`).value.trim();if(!title)return;
+  const note=document.getElementById(`fn-${catId}`).value.trim();
+  const priority=document.getElementById(`fp-${catId}`).value;
+  const due=document.getElementById(`fd-${catId}`).value;
+  const isRecur=document.getElementById(`frc-${catId}`).checked;
+  const recur=isRecur?document.getElementById(`frs-${catId}`).value:null;
+  const newTask={id:'t'+Date.now(),cat:catId,title,note,priority,due,done:false,recur,doneAt:null};
+  tasks.push(newTask);
+  await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(newTask)});
+  closeForm(catId);render();toast('Task added');
+}
+
+function buildTaskData(){
+  const t=td();
+  const over=tasks.filter(x=>!x.done&&x.due&&x.due<t);
+  const due=tasks.filter(x=>!x.done&&x.due===t);
+  const high=tasks.filter(x=>!x.done&&x.priority==='high'&&x.due&&x.due>t);
+  const open=tasks.filter(x=>!x.done);
+  let l=[];
+  l.push(`TASK TRACKER — ${t}`);
+  l.push(`Open: ${open.length} | Overdue: ${over.length} | Due today: ${due.length}`);l.push('');
+  if(over.length){l.push('OVERDUE:');over.forEach(x=>l.push(`  [${x.priority.toUpperCase()}] ${x.title} (due ${x.due})`));l.push('');}
+  if(due.length){l.push('DUE TODAY:');due.forEach(x=>l.push(`  [${x.priority.toUpperCase()}] ${x.title}`));l.push('');}
+  if(high.length){l.push('HIGH PRIORITY THIS WEEK:');high.forEach(x=>l.push(`  ${x.title} (due ${x.due})`));l.push('');}
+  CATS.forEach(c=>{
+    const co=tasks.filter(x=>!x.done&&x.cat===c.id);
+    if(co.length){l.push(`${c.label.toUpperCase()} (${co.length}):`);co.forEach(x=>{const s=x.due&&x.due<t?'OVERDUE':x.due===t?'TODAY':x.due?x.due:'no date';l.push(`  ${x.priority==='high'?'[H] ':''}${x.title} — ${s}`);});l.push('');}
+  });
+  return l.join('\n');
+}
+
+async function runBrief(){
+  const out=document.getElementById('brief-out');
+  const status=document.getElementById('brief-status');
+  const now=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  out.innerHTML=`<div class="brief-loading"><div class="spinner"></div>Generating brief...</div>`;
+  status.textContent=`Running ${now}`;
+  const taskData=buildTaskData();
+  const prompt=`You are the morning brief assistant for KBAN Logistics Ltd, a UK last-mile parcel delivery company. Generate a concise structured morning brief for the director, Danny Kay.\n\nToday is ${td()}.\n\nTask data:\n${taskData}\n\nFormat exactly as follows:\n\nMORNING BRIEF — [DATE]\n\nOVERDUE TASKS\nList overdue tasks with priority. If none, write "None overdue."\n\nDUE TODAY\nList tasks due today. If none, write "Nothing due today."\n\nHIGH PRIORITY THIS WEEK\nTop 3-5 high priority items for this week.\n\nTASK SUMMARY\nOne line: X open tasks, Y overdue, Z due today.\n\nKeep it concise, direct, and actionable. UK English only.`;
+  try{
+    const resp=await fetch('/api/brief',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
+    if(!resp.ok){const e=await resp.json();throw new Error(e.error||`Error ${resp.status}`);}
+    const data=await resp.json();
+    const runTime=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+    status.textContent=`Last run ${runTime}`;
+    out.innerHTML=`<div class="brief-body">${escHtml(data.text)}</div>`;
+  } catch(err){
+    status.textContent='Error';
+    out.innerHTML=`<div class="brief-body" style="color:var(--danger)">Error: ${escHtml(err.message)}</div>`;
+  }
+}
+
+function escHtml(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');}
+
+function toast(msg){
+  const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+init();
+</script>
+</body>
+</html>
