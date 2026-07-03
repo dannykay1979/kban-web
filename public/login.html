@@ -15,29 +15,29 @@
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 html,body{height:100%;}
 body{
-  font-family:'IBM Plex Sans',sans-serif;
-  background:#0B2E4E;
-  display:flex;align-items:center;justify-content:center;
-  min-height:100vh;
-  padding:20px;
-  padding-top:env(safe-area-inset-top,20px);
+font-family:'IBM Plex Sans',sans-serif;
+background:#0B2E4E;
+display:flex;align-items:center;justify-content:center;
+min-height:100vh;
+padding:20px;
+padding-top:env(safe-area-inset-top,20px);
 }
 
 .card{
-  background:#fff;
-  border-radius:16px;
-  padding:40px 36px;
-  width:100%;
-  max-width:400px;
-  box-shadow:0 8px 40px rgba(0,0,0,0.25);
+background:#fff;
+border-radius:16px;
+padding:40px 36px;
+width:100%;
+max-width:400px;
+box-shadow:0 8px 40px rgba(0,0,0,0.25);
 }
 
 .logo{display:flex;align-items:center;gap:12px;margin-bottom:32px;}
 .logo-mark{
-  width:44px;height:44px;
-  background:#2E83F0;border-radius:10px;
-  display:flex;align-items:center;justify-content:center;
-  flex-shrink:0;
+width:44px;height:44px;
+background:#2E83F0;border-radius:10px;
+display:flex;align-items:center;justify-content:center;
+flex-shrink:0;
 }
 .logo-mark svg{width:26px;height:26px;}
 .logo-word{}
@@ -49,49 +49,49 @@ h1{font-size:20px;font-weight:600;color:#0B2E4E;margin-bottom:6px;}
 
 label{display:block;font-size:12px;font-weight:600;color:#5a7a96;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:6px;}
 input[type=email],input[type=password]{
-  width:100%;
-  padding:12px 14px;
-  border:1.5px solid #d8e4ee;
-  border-radius:8px;
-  font-size:15px;
-  font-family:'IBM Plex Sans',sans-serif;
-  color:#0B2E4E;
-  background:#F5F7FA;
-  outline:none;
-  transition:border-color 0.15s;
-  margin-bottom:18px;
+width:100%;
+padding:12px 14px;
+border:1.5px solid #d8e4ee;
+border-radius:8px;
+font-size:15px;
+font-family:'IBM Plex Sans',sans-serif;
+color:#0B2E4E;
+background:#F5F7FA;
+outline:none;
+transition:border-color 0.15s;
+margin-bottom:18px;
 }
 input[type=email]:focus,input[type=password]:focus{
-  border-color:#2E83F0;
-  background:#fff;
+border-color:#2E83F0;
+background:#fff;
 }
 input[type=email]::placeholder,input[type=password]::placeholder{color:#b0c4d4;}
 
 .btn{
-  width:100%;
-  padding:13px;
-  background:#2E83F0;
-  color:#fff;
-  border:none;
-  border-radius:8px;
-  font-size:15px;
-  font-weight:600;
-  font-family:'IBM Plex Sans',sans-serif;
-  cursor:pointer;
-  transition:background 0.15s,opacity 0.15s;
-  margin-top:4px;
+width:100%;
+padding:13px;
+background:#2E83F0;
+color:#fff;
+border:none;
+border-radius:8px;
+font-size:15px;
+font-weight:600;
+font-family:'IBM Plex Sans',sans-serif;
+cursor:pointer;
+transition:background 0.15s,opacity 0.15s;
+margin-top:4px;
 }
 .btn:hover{background:#1a6dd4;}
 .btn:disabled{opacity:0.55;cursor:not-allowed;}
 
 .error{
-  background:#fee2e2;
-  color:#b91c1c;
-  border-radius:8px;
-  padding:10px 14px;
-  font-size:13px;
-  margin-bottom:16px;
-  display:none;
+background:#fee2e2;
+color:#b91c1c;
+border-radius:8px;
+padding:10px 14px;
+font-size:13px;
+margin-bottom:16px;
+display:none;
 }
 .error.show{display:block;}
 
@@ -101,32 +101,32 @@ input[type=email]::placeholder,input[type=password]::placeholder{color:#b0c4d4;}
 </head>
 <body>
 <div class="card">
-  <div class="logo">
-    <div class="logo-mark">
-      <svg viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M4 4h7v7H4zM15 4h7v7h-7zM4 15h7v7H4zM15 15h7v7h-7z" fill="white" opacity="0.9"/>
-      </svg>
-    </div>
-    <div class="logo-word">
-      <div class="logo-kban">KBAN</div>
-      <div class="logo-sub">Logistics Dashboard</div>
-    </div>
-  </div>
+<div class="logo">
+<div class="logo-mark">
+<svg viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M4 4h7v7H4zM15 4h7v7h-7zM4 15h7v7H4zM15 15h7v7h-7z" fill="white" opacity="0.9"/>
+</svg>
+</div>
+<div class="logo-word">
+<div class="logo-kban">KBAN</div>
+<div class="logo-sub">Logistics Dashboard</div>
+</div>
+</div>
 
-  <h1>Sign in</h1>
-  <p class="sub">Use your KBAN email and password.</p>
+<h1>Sign in</h1>
+<p class="sub">Use your KBAN email and password.</p>
 
-  <div class="error" id="err"></div>
+<div class="error" id="err"></div>
 
-  <form id="form" autocomplete="on">
-    <label for="email">Email</label>
-    <input type="email" id="email" name="email" placeholder="you@kbanlogistics.co.uk" autocomplete="email" required/>
+<form id="form" autocomplete="on">
+<label for="email">Email</label>
+<input type="email" id="email" name="email" placeholder="you@kbanlogistics.co.uk" autocomplete="email" required/>
 
-    <label for="password">Password</label>
-    <input type="password" id="password" name="password" placeholder="••••••••" autocomplete="current-password" required/>
+<label for="password">Password</label>
+<input type="password" id="password" name="password" placeholder="••••••••" autocomplete="current-password" required/>
 
-    <button class="btn" type="submit" id="btn">Sign in</button>
-  </form>
+<button class="btn" type="submit" id="btn">Sign in</button>
+</form>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -135,36 +135,36 @@ const SUPABASE_URL = 'https://eacaudjkppyhpsjzoakv.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhY2F1ZGprcHB5aHBzanpvYWt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1NDYwNzYsImV4cCI6MjA5ODEyMjA3Nn0.oxPp4xwKyt7MjeefQiC8zKApzwydlqst_GY1WyLVmxU';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-// If already logged in, go straight to dashboard
+// If already logged in, go straight to ops dashboard
 sb.auth.getSession().then(({data:{session}})=>{
-  if(session) window.location.replace('/');
+if(session) window.location.replace('/ops-form.html');
 });
 
 const form = document.getElementById('form');
-const btn  = document.getElementById('btn');
-const err  = document.getElementById('err');
+const btn = document.getElementById('btn');
+const err = document.getElementById('err');
 
 form.addEventListener('submit', async e => {
-  e.preventDefault();
-  err.classList.remove('show');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>Signing in…';
+e.preventDefault();
+err.classList.remove('show');
+btn.disabled = true;
+btn.innerHTML = '<span class="spinner"></span>Signing in…';
 
-  const email    = document.getElementById('email').value.trim();
-  const password = document.getElementById('password').value;
+const email = document.getElementById('email').value.trim();
+const password = document.getElementById('password').value;
 
-  const { error } = await sb.auth.signInWithPassword({ email, password });
+const { error } = await sb.auth.signInWithPassword({ email, password });
 
-  if (error) {
-    err.textContent = error.message === 'Invalid login credentials'
-      ? 'Email or password incorrect. Try again.'
-      : error.message;
-    err.classList.add('show');
-    btn.disabled = false;
-    btn.textContent = 'Sign in';
-  } else {
-    window.location.replace('/');
-  }
+if (error) {
+err.textContent = error.message === 'Invalid login credentials'
+? 'Email or password incorrect. Try again.'
+: error.message;
+err.classList.add('show');
+btn.disabled = false;
+btn.textContent = 'Sign in';
+} else {
+window.location.replace('/ops-form.html');
+}
 });
 </script>
 </body>
