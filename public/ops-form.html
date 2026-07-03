@@ -187,6 +187,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   <button class="tab-btn active" onclick="switchTab('daily')" id="tab-daily">Daily</button>
   <button class="tab-btn" onclick="switchTab('plan')" id="tab-plan">Weekly Plan</button>
   <button class="tab-btn" onclick="switchTab('rota')" id="tab-rota">Rota</button>
+  <button class="tab-btn" onclick="switchTab('history')" id="tab-history">History</button>
 </div>
 <div class="prog-track"><div class="prog-fill" id="prog"></div></div>
 
@@ -367,6 +368,17 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 
 </div><!-- /screen-rota -->
 
+<!-- HISTORY -->
+<div class="screen" id="screen-history" style="padding:16px;">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+    <select id="hist-depot" style="flex:1;min-width:130px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--navy);"><option value="">All depots</option><option>DHL Middleton</option><option>DHL Runcorn</option><option>DPD Aberdeen</option><option>DPD Edinburgh</option></select>
+    <input type="date" id="hist-from" style="flex:1;min-width:110px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--navy);">
+    <input type="date" id="hist-to" style="flex:1;min-width:110px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--navy);">
+    <button onclick="loadHistory()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;">Search</button>
+  </div>
+  <div id="hist-results"><p style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0;">Select a date range and press Search.</p></div>
+</div><!-- /screen-history -->
+
 <!-- ═══════════════════════════════════════════
      SUCCESS
 ═══════════════════════════════════════════ -->
@@ -403,11 +415,68 @@ document.getElementById('r-week').value = mon.toISOString().split('T')[0];
 
 // ── Tab switching ─────────────────────────────────────────────────────────
 function switchTab(t) {
-  ['daily','plan','rota'].forEach(tab => {
+  ['daily','plan','rota','history'].forEach(tab => {
     document.getElementById('screen-' + tab).className = 'screen' + (t===tab?' active':'');
     document.getElementById('tab-' + tab).className = 'tab-btn' + (t===tab?' active':'');
   });
   document.getElementById('success').style.display = 'none';
+  if (t === 'history') initHistory();
+}
+
+// ── History ───────────────────────────────────────────────────────────────
+function initHistory() {
+  const to = document.getElementById('hist-to');
+  const fr = document.getElementById('hist-from');
+  if (!to.value) {
+    const now = new Date();
+    to.value = now.toISOString().split('T')[0];
+    const week = new Date(now); week.setDate(now.getDate() - 6);
+    fr.value = week.toISOString().split('T')[0];
+    loadHistory();
+  }
+}
+
+async function loadHistory() {
+  const depot = document.getElementById('hist-depot').value;
+  const from  = document.getElementById('hist-from').value;
+  const to    = document.getElementById('hist-to').value;
+  const el    = document.getElementById('hist-results');
+  el.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0;">Loading...</p>';
+  let query = 'daily_ops?select=*&order=ops_date.desc,created_at.desc&limit=100';
+  if (depot) query += '&depot=eq.' + encodeURIComponent(depot);
+  if (from)  query += '&ops_date=gte.' + from;
+  if (to)    query += '&ops_date=lte.' + to;
+  try {
+    const rows = await sbFetch(query);
+    if (!rows || !rows.length) {
+      el.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0;">No submissions found.</p>';
+      return;
+    }
+    el.innerHTML = rows.map(r => {
+      const drivers = Array.isArray(r.drivers) ? r.drivers : [];
+      const absent  = drivers.filter(d => d.status === 'absent').length;
+      const late    = drivers.filter(d => d.status === 'late').length;
+      const fine    = drivers.filter(d => d.status === 'fine' && !d.unplanned).length;
+      const unplan  = drivers.filter(d => d.unplanned).length;
+      const dateLabel = new Date(r.ops_date).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+      const flags = [];
+      if (r.bay_available === false) flags.push('<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">Bay delay</span>');
+      if (r.sortation_done === false) flags.push('<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">Sort issue</span>');
+      if (absent) flags.push('<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">' + absent + ' no show</span>');
+      if (late)   flags.push('<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">' + late + ' late</span>');
+      if (unplan) flags.push('<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">' + unplan + ' unplanned</span>');
+      return '<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:10px;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">'
+        + '<div><div style="font-weight:700;font-size:14px;color:var(--navy);">' + r.depot + '</div>'
+        + '<div style="font-size:12px;color:var(--muted);margin-top:2px;">' + dateLabel + ' &nbsp;·&nbsp; ' + (r.submitted_by || 'Unknown') + '</div></div>'
+        + '<div style="font-size:12px;color:var(--muted);">' + fine + ' drivers fine</div></div>'
+        + (flags.length ? '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;">' + flags.join('') + '</div>' : '')
+        + (r.other_notes ? '<div style="margin-top:10px;font-size:12px;color:var(--navy);background:var(--lblue);padding:8px 10px;border-radius:6px;">' + r.other_notes + '</div>' : '')
+        + '</div>';
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<p style="color:#991b1b;font-size:13px;text-align:center;padding:32px 0;">Error: ' + e.message + '</p>';
+  }
 }
 
 // ── Supabase helpers ──────────────────────────────────────────────────────
@@ -881,6 +950,11 @@ async function submitDaily() {
         drivers: data.drivers, other_notes: data.other_notes, plan_id: data.plan_id,
       }),
     });
+    fetch('/api/notify-daily-ops', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(data),
+    }).catch(() => {});
     document.getElementById('screen-daily').style.display = 'none';
     document.getElementById('success').style.display = 'block';
     document.getElementById('s-title').textContent = 'Sheet Submitted';
