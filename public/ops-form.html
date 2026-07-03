@@ -393,10 +393,15 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 
 </div><!-- /wrap -->
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 // ── Config ────────────────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://eacaudjkppyhpsjzoakv.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhY2F1ZGprcHB5aHBzanpvYWt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1NDYwNzYsImV4cCI6MjA5ODEyMjA3Nn0.oxPp4xwKyt7MjeefQiC8zKApzwydlqst_GY1WyLVmxU';
+
+// ── Auth guard ────────────────────────────────────────────────────────────
+const _sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+(async()=>{ const {data:{session}} = await _sb.auth.getSession(); if(!session) window.location.replace('/login.html'); })();
 
 // ── State ─────────────────────────────────────────────────────────────────
 let ynState = { bay: null, sort: null };

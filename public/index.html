@@ -220,6 +220,9 @@ body{font-family:'IBM Plex Sans',sans-serif;background:var(--off);color:var(--te
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       Run brief
     </button>
+    <button class="btn-icon" title="Sign out" onclick="signOut()" style="color:rgba(255,255,255,0.5);padding:6px;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+    </button>
   </div>
 </header>
 
@@ -336,7 +339,18 @@ body{font-family:'IBM Plex Sans',sans-serif;background:var(--off);color:var(--te
 
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
+// ── Auth guard ────────────────────────────────────────────────────────────────
+const _SB_URL  = 'https://eacaudjkppyhpsjzoakv.supabase.co';
+const _SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhY2F1ZGprcHB5aHBzanpvYWt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1NDYwNzYsImV4cCI6MjA5ODEyMjA3Nn0.oxPp4xwKyt7MjeefQiC8zKApzwydlqst_GY1WyLVmxU';
+const _sb = supabase.createClient(_SB_URL, _SB_ANON);
+(async()=>{
+  const {data:{session}} = await _sb.auth.getSession();
+  if(!session) window.location.replace('/login.html');
+})();
+// ─────────────────────────────────────────────────────────────────────────────
+
 const CATS=[
   {id:'finance',label:'Finance, cash flow and payroll'},
   {id:'operations',label:'Operations'},
@@ -382,6 +396,7 @@ const DEF_TASKS=[
 const API='/api/tasks';
 let tasks=[], filt='all', col={}, editingId=null;
 
+async function signOut(){ await _sb.auth.signOut(); window.location.replace('/login.html'); }
 function td(){return new Date().toISOString().split('T')[0];}
 
 async function init(){
