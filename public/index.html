@@ -447,9 +447,21 @@ function renderCalDay(el, events){
     el.innerHTML='<div class="cal-none">No events.</div>';return;
   }
   el.innerHTML=events.map(ev=>{
-    const time=ev.time||'';
+    // API returns ev.start (ISO datetime), ev.subject, ev.location
+    let time='';
+    if(ev.start){
+      const d=new Date(ev.start);
+      if(!isNaN(d)){
+        time=d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false});
+        if(ev.end){
+          const e=new Date(ev.end);
+          if(!isNaN(e)) time+='–'+e.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false});
+        }
+      }
+    }
+    const title=ev.subject||ev.title||'(No title)';
     const loc=ev.location?`<div class="cal-ev-loc">${escHtml(ev.location)}</div>`:'';
-    return`<div class="cal-ev"><div class="cal-ev-t">${escHtml(time)}</div><div>${escHtml(ev.title)}</div>${loc}</div>`;
+    return`<div class="cal-ev"><div class="cal-ev-t">${escHtml(time)}</div><div>${escHtml(title)}</div>${loc}</div>`;
   }).join('');
 }
 
