@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>KBAN Driver Check-In</title>
+<style>
+:root {
+  --navy:#0B2E4E; --blue:#2E83F0; --lblue:#e8f2fe;
+  --border:#d0d7de; --bg:#f0f4f8; --white:#fff;
+  --text:#1a1a2e; --muted:#6b7280;
+  --green:#16a34a; --gbg:#dcfce7;
+  --red:#dc2626; --rbg:#fee2e2;
+  --amber:#d97706; --abg:#fef3c7;
+  --r:12px; --sh:0 1px 4px rgba(0,0,0,.08),0 4px 12px rgba(0,0,0,.06);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--text);font-size:15px;padding-bottom:48px}
+
+header{background:var(--navy);padding:14px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.logo{width:38px;height:38px;flex-shrink:0}
+.htxt h1{color:#fff;font-size:17px;font-weight:700;line-height:1.2}
+.htxt p{color:rgba(255,255,255,.5);font-size:12px}
+.hbadge{margin-left:auto;background:rgba(255,255,255,.1);border-radius:20px;padding:4px 10px;color:rgba(255,255,255,.8);font-size:12px;white-space:nowrap}
+
+.wrap{max-width:480px;margin:0 auto;padding:20px 16px 32px}
+.screen{display:none}.screen.active{display:block}
+
+.card{background:var(--white);border-radius:var(--r);box-shadow:var(--sh);margin-bottom:14px;overflow:hidden}
+.ch{background:var(--navy);padding:11px 14px;display:flex;align-items:center;gap:9px}
+.ch h2{color:#fff;font-size:14px;font-weight:600}
+.cb{padding:16px}
+
+.f{margin-bottom:14px}.f:last-child{margin-bottom:0}
+label{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px}
+label .r{color:var(--blue)}
+input,select,textarea{width:100%;padding:13px 14px;border:1.5px solid var(--border);border-radius:9px;font-size:16px;font-family:inherit;background:var(--white);color:var(--text);-webkit-appearance:none;appearance:none;transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(46,131,240,.15)}
+textarea{resize:none;line-height:1.5}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 13px center;padding-right:38px}
+.r2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.hint{font-size:11px;color:var(--muted);margin-top:4px;font-style:italic}
+
+/* PIN pad */
+.pin-display{display:flex;justify-content:center;gap:14px;margin:20px 0}
+.pin-dot{width:20px;height:20px;border-radius:50%;border:2px solid var(--border);background:var(--white);transition:all .15s}
+.pin-dot.filled{background:var(--navy);border-color:var(--navy)}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:4px}
+.pin-key{padding:18px 10px;border:1.5px solid var(--border);border-radius:12px;background:var(--white);font-size:22px;font-weight:600;color:var(--navy);cursor:pointer;text-align:center;transition:all .1s;user-select:none;-webkit-user-select:none}
+.pin-key:active{background:var(--lblue);border-color:var(--blue);transform:scale(.95)}
+.pin-key.del{font-size:18px;color:var(--muted)}
+.pin-key.blank{border:none;background:transparent;cursor:default}
+
+/* buttons */
+.btn{width:100%;padding:16px;background:var(--blue);color:#fff;border:none;border-radius:var(--r);font-size:17px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(46,131,240,.35);transition:opacity .15s}
+.btn:disabled{background:#93c5fd;box-shadow:none;cursor:not-allowed;opacity:.7}
+.btn.sec{background:var(--navy);box-shadow:none;margin-top:10px;font-size:15px;padding:13px}
+.btn.ghost{background:none;color:var(--blue);border:1.5px solid var(--blue);box-shadow:none;font-size:14px;padding:12px;margin-top:8px}
+.snote{text-align:center;font-size:12px;color:var(--muted);margin-top:8px}
+
+.spin{display:inline-block;width:18px;height:18px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;vertical-align:middle;margin-right:8px}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+#loading{display:none;position:fixed;inset:0;background:rgba(11,46,78,.7);z-index:200;align-items:center;justify-content:center;flex-direction:column;gap:12px}
+#loading.show{display:flex}
+#loading .lspin{width:40px;height:40px;border:3px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
+#loading p{color:#fff;font-size:14px;font-weight:600}
+
+#err-bar{display:none;background:var(--rbg);border:1px solid #fca5a5;border-radius:9px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--red)}
+
+.alert{border-radius:8px;padding:10px 13px;font-size:13px;margin-bottom:12px;line-height:1.4}
+.alert-info{background:var(--lblue);color:var(--navy);border:1px solid #bfdbfe}
+.alert-ok{background:var(--gbg);color:#14532d;border:1px solid #86efac}
+.alert-warn{background:var(--abg);color:#92400e;border:1px solid #fcd34d}
+
+/* success */
+.success-wrap{text-align:center;padding:40px 20px}
+.s-icon{width:72px;height:72px;margin:0 auto 20px;background:var(--gbg);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:36px}
+.success-wrap h2{font-size:24px;color:var(--navy);margin-bottom:8px}
+.success-wrap p{color:var(--muted);font-size:14px;line-height:1.5}
+.smeta{background:var(--lblue);border-radius:10px;padding:14px 16px;margin:20px 0;font-size:13px;color:var(--navy);text-align:left}
+.smeta strong{display:block;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;margin-top:10px}
+.smeta strong:first-child{margin-top:0}
+
+.div{height:1px;background:var(--border);margin:14px 0}
+
+/* progress steps */
+.steps{display:flex;gap:0;margin-bottom:20px;background:var(--white);border-radius:var(--r);box-shadow:var(--sh);overflow:hidden}
+.step{flex:1;padding:10px 4px;text-align:center;font-size:11px;font-weight:700;color:var(--muted);border-right:1px solid var(--border)}
+.step:last-child{border-right:none}
+.step.done{background:var(--gbg);color:var(--green)}
+.step.active{background:var(--navy);color:#fff}
+
+/* day type selector */
+.dtype-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.dtype-btn{padding:13px 8px;border:1.5px solid var(--border);border-radius:9px;background:var(--white);font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;text-align:center;transition:all .12s;line-height:1.3}
+.dtype-btn.active{background:var(--lblue);border-color:var(--blue);color:var(--navy)}
+.dtype-btn .rate{display:block;font-size:11px;font-weight:400;color:var(--muted);margin-top:2px}
+.dtype-btn.active .rate{color:var(--blue)}
+
+/* optional field */
+.optional-badge{font-size:10px;font-weight:400;text-transform:none;color:var(--muted);margin-left:4px;letter-spacing:0}
+</style>
+</head>
+<body>
+
+<div id="loading"><div class="lspin"></div><p id="loading-msg">Loading...</p></div>
+
+<header>
+  <svg class="logo" viewBox="0 0 38 38" xmlns="http://www.w3.org/2000/svg" width="38" height="38">
+    <rect width="38" height="38" fill="#0B2E4E"/>
+    <polygon points="13,8 21,19 13,30 16,33 26,19 16,5" fill="#2E83F0" opacity="0.45"/>
+    <polygon points="8,8 16,19 8,30 11,33 21,19 11,5" fill="#2E83F0"/>
+  </svg>
+  <div class="htxt"><h1>Driver Check-In</h1><p id="hdr-sub">KBAN Logistics</p></div>
+  <div class="hbadge" id="hdr-date"></div>
+</header>
+
+<div class="wrap">
+<div id="err-bar"></div>
+
+<!-- ═══════════════════════════════════════════
+     SCREEN 1 — PIN LOGIN
+═══════════════════════════════════════════ -->
+<div class="screen active" id="screen-login">
+
+  <div class="card">
+    <div class="ch"><h2>Driver Sign-In</h2></div>
+    <div class="cb">
+      <div class="f">
+        <label>Depot <span class="r">*</span></label>
+        <select id="login-depot" onchange="onLoginDepotChange()">
+          <option value="">Select your depot...</option>
+          <option>DPD Aberdeen</option>
+          <option>DPD Edinburgh</option>
+          <option>DHL Middleton</option>
+          <option>DHL Runcorn</option>
+        </select>
+      </div>
+      <div class="f" id="login-driver-wrap" style="display:none">
+        <label>Driver ID <span class="r">*</span></label>
+        <input type="text" id="login-driver-id" placeholder="e.g. FD72579 or MD Temp 4" autocomplete="off" autocapitalize="characters" oninput="this.value=this.value.toUpperCase();clearPin()">
+        <div class="hint">Your route ID or temp ID for today</div>
+      </div>
+      <div id="pin-section" style="display:none">
+        <div class="div"></div>
+        <label style="text-align:center;display:block">Enter your 4-digit PIN</label>
+        <div class="pin-display">
+          <div class="pin-dot" id="pd0"></div>
+          <div class="pin-dot" id="pd1"></div>
+          <div class="pin-dot" id="pd2"></div>
+          <div class="pin-dot" id="pd3"></div>
+        </div>
+        <div class="pin-pad">
+          <button class="pin-key" onclick="pinKey('1')">1</button>
+          <button class="pin-key" onclick="pinKey('2')">2</button>
+          <button class="pin-key" onclick="pinKey('3')">3</button>
+          <button class="pin-key" onclick="pinKey('4')">4</button>
+          <button class="pin-key" onclick="pinKey('5')">5</button>
+          <button class="pin-key" onclick="pinKey('6')">6</button>
+          <button class="pin-key" onclick="pinKey('7')">7</button>
+          <button class="pin-key" onclick="pinKey('8')">8</button>
+          <button class="pin-key" onclick="pinKey('9')">9</button>
+          <button class="pin-key blank"></button>
+          <button class="pin-key" onclick="pinKey('0')">0</button>
+          <button class="pin-key del" onclick="pinDel()">⌫</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /screen-login -->
+
+<!-- ═══════════════════════════════════════════
+     SCREEN 2 — START OF DAY
+═══════════════════════════════════════════ -->
+<div class="screen" id="screen-sod">
+
+  <div class="steps">
+    <div class="step done">Sign-In</div>
+    <div class="step active">Start of Day</div>
+    <div class="step">End of Day</div>
+  </div>
+
+  <div class="alert alert-info" id="sod-welcome"></div>
+
+  <!-- Day Type -->
+  <div class="card">
+    <div class="ch"><h2>Day Type</h2></div>
+    <div class="cb">
+      <div class="dtype-grid" id="dtype-grid"></div>
+    </div>
+  </div>
+
+  <!-- Route & Timing -->
+  <div class="card" id="sod-route-card">
+    <div class="ch"><h2>Route &amp; Timing</h2></div>
+    <div class="cb">
+      <div class="r2">
+        <div class="f">
+          <label>Time at Depot <span class="r">*</span></label>
+          <input type="time" id="sod-time-at-depot">
+        </div>
+        <div class="f">
+          <label>Planned Return <span class="r">*</span></label>
+          <input type="time" id="sod-planned-return">
+        </div>
+      </div>
+      <div class="f">
+        <label>Postcodes / Route Area <span class="r">*</span></label>
+        <input type="text" id="sod-postcodes" placeholder="e.g. OL9/OL8/OL7" autocapitalize="characters">
+      </div>
+      <div class="f">
+        <label>Start Mileage <span class="r">*</span></label>
+        <input type="number" id="sod-start-mileage" placeholder="e.g. 9901" inputmode="numeric">
+      </div>
+    </div>
+  </div>
+
+  <!-- Declared Loads -->
+  <div class="card" id="sod-loads-card">
+    <div class="ch"><h2>Declared Load</h2></div>
+    <div class="cb">
+      <p class="hint" style="margin-bottom:12px">Enter the figures from your vehicle as loaded at depot.</p>
+      <div class="r2">
+        <div class="f">
+          <label>Delivery Drops <span class="r">*</span></label>
+          <input type="number" id="sod-delivery-drops" placeholder="e.g. 77" inputmode="numeric">
+        </div>
+        <div class="f">
+          <label>Parcel Count <span class="r">*</span></label>
+          <input type="number" id="sod-parcel-count" placeholder="e.g. 100" inputmode="numeric">
+        </div>
+      </div>
+      <div class="f" id="sod-collections-wrap">
+        <label>Collection Stops <span class="optional-badge">(DHL only)</span></label>
+        <input type="number" id="sod-collection-stops" placeholder="e.g. 13" inputmode="numeric">
+      </div>
+    </div>
+  </div>
+
+  <button class="btn" id="sod-btn" onclick="submitSOD()">Submit Start of Day</button>
+  <p class="snote">Your lead will add your departure time when you check out</p>
+
+</div><!-- /screen-sod -->
+
+<!-- ═══════════════════════════════════════════
+     SCREEN 2B — SOD SUBMITTED (AWAITING DEPARTURE)
+═══════════════════════════════════════════ -->
+<div class="screen" id="screen-waiting">
+
+  <div class="steps">
+    <div class="step done">Sign-In</div>
+    <div class="step done">Start of Day</div>
+    <div class="step">End of Day</div>
+  </div>
+
+  <div class="card">
+    <div class="ch"><h2>Start of Day Submitted</h2></div>
+    <div class="cb">
+      <div class="alert alert-ok">✓ Your start-of-day has been recorded. Check out with your depot lead before departing.</div>
+      <div class="smeta" id="waiting-summary"></div>
+      <div class="alert alert-warn" style="margin-top:12px">⏳ Your lead will mark your departure time when you check out. Come back here at the end of your route to submit your end-of-day.</div>
+    </div>
+  </div>
+
+  <button class="btn sec" onclick="showEOD()">I'm Back — Submit End of Day →</button>
+
+</div><!-- /screen-waiting -->
+
+<!-- ═══════════════════════════════════════════
+     SCREEN 3 — END OF DAY
+═══════════════════════════════════════════ -->
+<div class="screen" id="screen-eod">
+
+  <div class="steps">
+    <div class="step done">Sign-In</div>
+    <div class="step done">Start of Day</div>
+    <div class="step active">End of Day</div>
+  </div>
+
+  <div class="alert alert-info" id="eod-summary-banner"></div>
+
+  <!-- Timing & Mileage -->
+  <div class="card">
+    <div class="ch"><h2>Timing &amp; Mileage</h2></div>
+    <div class="cb">
+      <div class="r2">
+        <div class="f">
+          <label>End Mileage <span class="r">*</span></label>
+          <input type="number" id="eod-end-mileage" placeholder="e.g. 9968" inputmode="numeric">
+        </div>
+        <div class="f">
+          <label>Time at Depot <span class="r">*</span></label>
+          <input type="time" id="eod-time-at-depot">
+        </div>
+      </div>
+      <div class="f">
+        <label>Time of Last Delivery <span class="r">*</span></label>
+        <input type="time" id="eod-last-delivery-time">
+      </div>
+    </div>
+  </div>
+
+  <!-- Deliveries -->
+  <div class="card">
+    <div class="ch"><h2>Deliveries</h2></div>
+    <div class="cb">
+      <div class="r2">
+        <div class="f">
+          <label>Successful Drops <span class="r">*</span></label>
+          <input type="number" id="eod-successful-drops" placeholder="0" inputmode="numeric">
+        </div>
+        <div class="f">
+          <label>Failed Drops <span class="r">*</span></label>
+          <input type="number" id="eod-failed-drops" placeholder="0" inputmode="numeric" oninput="toggleFailedReason('del')">
+        </div>
+      </div>
+      <div id="eod-del-reason-wrap" style="display:none">
+        <div class="f">
+          <label>Reason for Failed Deliveries <span class="r">*</span></label>
+          <textarea id="eod-del-reason" placeholder="e.g. No access, customer not home, wrong address..." rows="3"></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Collections (DHL only) -->
+  <div class="card" id="eod-collections-card">
+    <div class="ch"><h2>Collections</h2></div>
+    <div class="cb">
+      <div class="r2">
+        <div class="f">
+          <label>Successful Stops <span class="r">*</span></label>
+          <input type="number" id="eod-successful-collections" placeholder="0" inputmode="numeric">
+        </div>
+        <div class="f">
+          <label>Parcels Collected <span class="r">*</span></label>
+          <input type="number" id="eod-parcels-collected" placeholder="0" inputmode="numeric">
+        </div>
+      </div>
+      <div class="r2">
+        <div class="f">
+          <label>Failed Stops <span class="r">*</span></label>
+          <input type="number" id="eod-failed-collections" placeholder="0" inputmode="numeric" oninput="toggleFailedReason('col')">
+        </div>
+        <div class="f"></div>
+      </div>
+      <div id="eod-col-reason-wrap" style="display:none">
+        <div class="f">
+          <label>Reason for Failed Collections <span class="r">*</span></label>
+          <textarea id="eod-col-reason" placeholder="e.g. Business closed, no one available..." rows="3"></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn" id="eod-btn" onclick="submitEOD()">Submit End of Day</button>
+  <p class="snote">Your depot lead will review and confirm before closing the day</p>
+
+</div><!-- /screen-eod -->
+
+<!-- ═══════════════════════════════════════════
+     SCREEN 4 — SUCCESS
+═══════════════════════════════════════════ -->
+<div class="screen" id="screen-success">
+  <div class="success-wrap">
+    <div class="s-icon">✓</div>
+    <h2 id="s-title">Submitted</h2>
+    <p id="s-body">Your end-of-day has been recorded.</p>
+    <div class="smeta" id="s-meta"></div>
+    <p style="font-size:13px;color:var(--muted);margin-top:12px">Your depot lead will review your figures and confirm. Have a good evening.</p>
+  </div>
+</div><!-- /screen-success -->
+
+</div><!-- /wrap -->
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+// ── Config ────────────────────────────────────────────────────────────────
+const SUPABASE_URL  = 'https://eacaudjkppyhpsjzoakv.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhY2F1ZGprcHB5aHBzanpvYWt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1NDYwNzYsImV4cCI6MjA5ODEyMjA3Nn0.oxPp4xwKyt7MjeefQiC8zKApzwydlqst_GY1WyLVmxU';
+
+// ── State ─────────────────────────────────────────────────────────────────
+let pin = '';
+let currentDriver = null;   // { id, name, depot, client, shift_id }
+let currentShift  = null;   // existing shift record if any
+let dayType = 'standard';
+
+const DAY_TYPES = [
+  { key: 'standard',      label: 'Standard Route',     rate: null,   clients: ['DPD','DHL'] },
+  { key: 'dpd_classroom', label: 'DPD Classroom',      rate: '£75',  clients: ['DPD'] },
+  { key: 'dpd_ridealong', label: 'DPD Ride-Along',     rate: '£110', clients: ['DPD'] },
+  { key: 'dhl_ridealong', label: 'DHL Ride-Along',     rate: '£75',  clients: ['DHL'] },
+];
+
+// ── Init ──────────────────────────────────────────────────────────────────
+const today = new Date();
+document.getElementById('hdr-date').textContent = today.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+
+// Set current time as default for time fields
+const nowTime = today.toTimeString().slice(0,5);
+document.getElementById('sod-time-at-depot').value = nowTime;
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+async function sbFetch(path, opts={}) {
+  const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, {
+    ...opts,
+    headers: {
+      'apikey': SUPABASE_ANON,
+      'Authorization': 'Bearer ' + SUPABASE_ANON,
+      'Content-Type': 'application/json',
+      'Prefer': opts.prefer || 'return=representation',
+      ...(opts.headers||{})
+    }
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(()=>({}));
+    throw new Error(e.message || 'Database error ' + res.status);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+async function sha256(str) {
+  const buf  = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.className = 'screen');
+  document.getElementById('screen-' + id).className = 'screen active';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function showLoading(msg) {
+  document.getElementById('loading-msg').textContent = msg || 'Loading...';
+  document.getElementById('loading').className = 'show';
+}
+function hideLoading() { document.getElementById('loading').className = ''; }
+
+function showErr(msg) {
+  const b = document.getElementById('err-bar');
+  b.textContent = '⚠ ' + msg;
+  b.style.display = 'block';
+  b.scrollIntoView({behavior:'smooth',block:'center'});
+  setTimeout(() => { b.style.display = 'none'; }, 6000);
+}
+
+function clearErr() { document.getElementById('err-bar').style.display = 'none'; }
+
+// ── Login flow ────────────────────────────────────────────────────────────
+function onLoginDepotChange() {
+  const depot = document.getElementById('login-depot').value;
+  document.getElementById('login-driver-wrap').style.display = depot ? '' : 'none';
+  document.getElementById('pin-section').style.display = 'none';
+  clearPin();
+}
+
+function onDriverIdInput() {
+  const id = document.getElementById('login-driver-id').value.trim();
+  document.getElementById('pin-section').style.display = id.length >= 2 ? '' : 'none';
+  clearPin();
+}
+
+document.getElementById('login-driver-id').addEventListener('input', onDriverIdInput);
+
+// ── PIN pad ───────────────────────────────────────────────────────────────
+function clearPin() {
+  pin = '';
+  updatePinDots();
+}
+
+function updatePinDots() {
+  for (let i = 0; i < 4; i++) {
+    document.getElementById('pd' + i).className = 'pin-dot' + (i < pin.length ? ' filled' : '');
+  }
+}
+
+function pinKey(digit) {
+  if (pin.length >= 4) return;
+  pin += digit;
+  updatePinDots();
+  if (pin.length === 4) {
+    setTimeout(attemptLogin, 150);
+  }
+}
+
+function pinDel() {
+  pin = pin.slice(0, -1);
+  updatePinDots();
+}
+
+async function attemptLogin() {
+  const depot    = document.getElementById('login-depot').value;
+  const driverId = document.getElementById('login-driver-id').value.trim().toUpperCase();
+  if (!depot || !driverId || pin.length !== 4) return;
+
+  clearErr();
+  showLoading('Verifying...');
+
+  try {
+    const hash = await sha256(pin);
+
+    // ── TEST MODE: full bypass (no Supabase calls) ─────────────────────────
+    // Remove this block before going live. Test: Driver ID = TEST01, PIN = 1234
+    const TEST_HASH = '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4';
+    const isTestMode = (driverId === 'TEST01' && hash === TEST_HASH);
+    // ── END TEST MODE ──────────────────────────────────────────────────────
+
+    let rows;
+    if (isTestMode) {
+      rows = [{ driver_id: 'TEST01', driver_name: 'Test Driver', depot, client: depot.startsWith('DHL') ? 'DHL' : 'DPD', active: true }];
+    } else {
+      rows = await sbFetch(`driver_pins?driver_id=eq.${encodeURIComponent(driverId)}&depot=eq.${encodeURIComponent(depot)}&pin_hash=eq.${encodeURIComponent(hash)}&active=eq.true&select=*`);
+    }
+
+    if (!rows || rows.length === 0) {
+      hideLoading();
+      clearPin();
+      showErr('Incorrect PIN or driver ID. Please try again.');
+      return;
+    }
+
+    const driver = rows[0];
+    currentDriver = { id: driver.driver_id, name: driver.driver_name, depot: driver.depot, client: driver.client };
+
+    // Check for existing shift today
+    const todayStr = today.toISOString().split('T')[0];
+    let shifts;
+    if (isTestMode) {
+      shifts = []; // No existing shift in test mode — always go to SOD
+    } else {
+      shifts = await sbFetch(`driver_shifts?driver_id=eq.${encodeURIComponent(driverId)}&shift_date=eq.${todayStr}&select=*`);
+    }
+    currentShift = shifts && shifts.length > 0 ? shifts[0] : null;
+
+    hideLoading();
+
+    if (!currentShift) {
+      // No shift yet — show Start of Day
+      buildDayTypeGrid(driver.client);
+      document.getElementById('sod-welcome').textContent = `Good morning, ${driver.driver_name}. Complete your start-of-day details below before departing.`;
+      // Show/hide collections for DHL
+      document.getElementById('sod-collections-wrap').style.display = driver.client === 'DHL' ? '' : 'none';
+      document.getElementById('hdr-sub').textContent = driver.driver_name + ' · ' + driver.depot;
+      showScreen('sod');
+    } else if (currentShift.status === 'sod_complete') {
+      // SOD done, not yet EOD
+      renderWaitingScreen();
+    } else if (currentShift.status === 'eod_complete') {
+      showErr('Your end-of-day for today has already been submitted. Contact your depot lead if you need to make a correction.');
+      clearPin();
+    }
+  } catch(e) {
+    hideLoading();
+    clearPin();
+    showErr('Could not verify. Check your connection and try again.');
+  }
+}
+
+// ── Day type grid ─────────────────────────────────────────────────────────
+function buildDayTypeGrid(client) {
+  const grid = document.getElementById('dtype-grid');
+  const types = DAY_TYPES.filter(t => t.clients.includes(client));
+  grid.innerHTML = types.map(t => `
+    <button class="dtype-btn${t.key === 'standard' ? ' active' : ''}" onclick="selectDayType('${t.key}')" id="dtype-${t.key}">
+      ${t.label}${t.rate ? `<span class="rate">${t.rate} flat rate</span>` : ''}
+    </button>
+  `).join('');
+  // Show/hide route fields based on selection
+  selectDayType('standard');
+}
+
+function selectDayType(key) {
+  dayType = key;
+  document.querySelectorAll('.dtype-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('dtype-' + key);
+  if (btn) btn.classList.add('active');
+  // Hide route/load cards for training days
+  const isTraining = key !== 'standard';
+  document.getElementById('sod-route-card').style.display = isTraining ? 'none' : '';
+  document.getElementById('sod-loads-card').style.display = isTraining ? 'none' : '';
+}
+
+// ── Submit Start of Day ───────────────────────────────────────────────────
+async function submitSOD() {
+  clearErr();
+  const isTraining = dayType !== 'standard';
+
+  if (!isTraining) {
+    const timeAtDepot   = document.getElementById('sod-time-at-depot').value;
+    const plannedReturn = document.getElementById('sod-planned-return').value;
+    const postcodes     = document.getElementById('sod-postcodes').value.trim();
+    const startMileage  = document.getElementById('sod-start-mileage').value;
+    const deliveryDrops = document.getElementById('sod-delivery-drops').value;
+    const parcelCount   = document.getElementById('sod-parcel-count').value;
+
+    if (!timeAtDepot)   return showErr('Please enter your time at depot.');
+    if (!plannedReturn) return showErr('Please enter your planned return time.');
+    if (!postcodes)     return showErr('Please enter your postcodes or route area.');
+    if (!startMileage)  return showErr('Please enter your start mileage.');
+    if (!deliveryDrops) return showErr('Please enter your delivery drops.');
+    if (!parcelCount)   return showErr('Please enter your parcel count.');
+  }
+
+  const btn = document.getElementById('sod-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>Submitting...';
+  showLoading('Saving start of day...');
+
+  try {
+    const todayStr = today.toISOString().split('T')[0];
+    const payload = {
+      shift_date:   todayStr,
+      driver_id:    currentDriver.id,
+      driver_name:  currentDriver.name,
+      depot:        currentDriver.depot,
+      client:       currentDriver.client,
+      day_type:     dayType,
+      status:       'sod_complete',
+      sod_submitted_at: new Date().toISOString(),
+    };
+
+    if (!isTraining) {
+      payload.time_at_depot             = document.getElementById('sod-time-at-depot').value || null;
+      payload.planned_return_time       = document.getElementById('sod-planned-return').value || null;
+      payload.postcodes                 = document.getElementById('sod-postcodes').value.trim() || null;
+      payload.start_mileage             = parseInt(document.getElementById('sod-start-mileage').value) || null;
+      payload.delivery_drops_planned    = parseInt(document.getElementById('sod-delivery-drops').value) || null;
+      payload.parcel_count              = parseInt(document.getElementById('sod-parcel-count').value) || null;
+      payload.collection_stops_planned  = parseInt(document.getElementById('sod-collection-stops').value) || null;
+    }
+
+    let result;
+    if (currentDriver.id === 'TEST01') {
+      // TEST MODE: skip Supabase write entirely
+      result = [{ ...payload, id: 'test-shift-' + Date.now() }];
+    } else {
+      result = await sbFetch('driver_shifts', {
+        method: 'POST',
+        prefer: 'return=representation',
+        body: JSON.stringify(payload),
+      });
+    }
+    currentShift = Array.isArray(result) ? result[0] : result;
+    hideLoading();
+    renderWaitingScreen();
+
+  } catch(e) {
+    hideLoading();
+    showErr('Failed to save. ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Submit Start of Day';
+  }
+}
+
+function renderWaitingScreen() {
+  const s = currentShift;
+  const isDHL = currentDriver.client === 'DHL';
+  let html = `<strong>Driver</strong>${s.driver_name}`;
+  html += `<strong>Depot</strong>${s.depot}`;
+  html += `<strong>Day Type</strong>${DAY_TYPES.find(t=>t.key===s.day_type)?.label || s.day_type}`;
+  if (s.day_type === 'standard') {
+    if (s.time_at_depot)          html += `<strong>Arrived at Depot</strong>${s.time_at_depot}`;
+    if (s.delivery_drops_planned) html += `<strong>Delivery Drops Declared</strong>${s.delivery_drops_planned}`;
+    if (s.parcel_count)           html += `<strong>Parcel Count</strong>${s.parcel_count}`;
+    if (isDHL && s.collection_stops_planned) html += `<strong>Collection Stops</strong>${s.collection_stops_planned}`;
+    if (s.postcodes)              html += `<strong>Route Area</strong>${s.postcodes}`;
+    if (s.start_mileage)          html += `<strong>Start Mileage</strong>${s.start_mileage}`;
+  }
+  if (s.depot_departure_time)     html += `<strong>Departure Time (set by lead)</strong>${s.depot_departure_time} ✓`;
+  document.getElementById('waiting-summary').innerHTML = html;
+  document.getElementById('hdr-sub').textContent = currentDriver.name + ' · ' + currentDriver.depot;
+  showScreen('waiting');
+}
+
+function showEOD() {
+  const isDHL = currentDriver.client === 'DHL';
+  const s = currentShift;
+
+  // Banner summary of SOD
+  let banner = `Route: ${s.postcodes || 'Training day'}`;
+  if (s.delivery_drops_planned) banner += ` · ${s.delivery_drops_planned} drops planned`;
+  if (s.start_mileage)          banner += ` · Started at ${s.start_mileage} miles`;
+  document.getElementById('eod-summary-banner').textContent = banner;
+
+  // Show/hide collections card
+  document.getElementById('eod-collections-card').style.display = isDHL ? '' : 'none';
+
+  // Pre-set current time
+  const now = new Date().toTimeString().slice(0,5);
+  document.getElementById('eod-time-at-depot').value = now;
+
+  showScreen('eod');
+}
+
+// ── Conditional fields ────────────────────────────────────────────────────
+function toggleFailedReason(type) {
+  const val = parseInt(document.getElementById(`eod-${type === 'del' ? 'failed-drops' : 'failed-collections'}`).value) || 0;
+  document.getElementById(`eod-${type}-reason-wrap`).style.display = val > 0 ? '' : 'none';
+}
+
+// ── Submit End of Day ─────────────────────────────────────────────────────
+async function submitEOD() {
+  clearErr();
+  const isDHL = currentDriver.client === 'DHL';
+
+  const endMileage      = document.getElementById('eod-end-mileage').value;
+  const timeAtDepot     = document.getElementById('eod-time-at-depot').value;
+  const lastDelivery    = document.getElementById('eod-last-delivery-time').value;
+  const successDrops    = document.getElementById('eod-successful-drops').value;
+  const failedDrops     = document.getElementById('eod-failed-drops').value;
+  const failedDelReason = document.getElementById('eod-del-reason').value.trim();
+
+  if (!endMileage)   return showErr('Please enter your end mileage.');
+  if (!timeAtDepot)  return showErr('Please enter your time back at depot.');
+  if (!lastDelivery) return showErr('Please enter the time of your last delivery.');
+  if (successDrops === '') return showErr('Please enter successful delivery drops (0 if none).');
+  if (failedDrops === '')  return showErr('Please enter failed delivery drops (0 if none).');
+  if (parseInt(failedDrops) > 0 && !failedDelReason) return showErr('Please give a reason for failed deliveries.');
+
+  let successCols = 0, parcelsColl = 0, failedCols = 0, failedColReason = '';
+  if (isDHL) {
+    successCols    = document.getElementById('eod-successful-collections').value;
+    parcelsColl    = document.getElementById('eod-parcels-collected').value;
+    failedCols     = document.getElementById('eod-failed-collections').value;
+    failedColReason = document.getElementById('eod-col-reason').value.trim();
+    if (successCols === '')  return showErr('Please enter successful collection stops.');
+    if (parcelsColl === '')  return showErr('Please enter parcels collected.');
+    if (failedCols === '')   return showErr('Please enter failed collections (0 if none).');
+    if (parseInt(failedCols) > 0 && !failedColReason) return showErr('Please give a reason for failed collections.');
+  }
+
+  const btn = document.getElementById('eod-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>Submitting...';
+  showLoading('Saving end of day...');
+
+  try {
+    const payload = {
+      end_mileage:                parseInt(endMileage),
+      time_at_depot_eod:          timeAtDepot,
+      time_last_delivery:         lastDelivery,
+      successful_delivery_drops:  parseInt(successDrops) || 0,
+      failed_delivery_drops:      parseInt(failedDrops) || 0,
+      failed_delivery_reason:     failedDelReason || null,
+      eod_submitted_at:           new Date().toISOString(),
+      status:                     'eod_complete',
+    };
+
+    if (isDHL) {
+      payload.successful_collection_stops = parseInt(successCols) || 0;
+      payload.parcels_collected           = parseInt(parcelsColl) || 0;
+      payload.failed_collections          = parseInt(failedCols) || 0;
+      payload.failed_collection_reason    = failedColReason || null;
+    }
+
+    if (currentDriver.id !== 'TEST01') {
+      await sbFetch(`driver_shifts?id=eq.${currentShift.id}`, {
+        method:  'PATCH',
+        prefer:  'return=representation',
+        body:    JSON.stringify(payload),
+      });
+    }
+
+    hideLoading();
+
+    // Success screen
+    const dropDelta = parseInt(successDrops) - (currentShift.delivery_drops_planned || 0);
+    let metaHtml = `<strong>Driver</strong>${currentDriver.name}`;
+    metaHtml += `<strong>Depot</strong>${currentDriver.depot}`;
+    metaHtml += `<strong>Planned Drops</strong>${currentShift.delivery_drops_planned || 'N/A'}`;
+    metaHtml += `<strong>Successful Drops</strong>${successDrops}`;
+    if (dropDelta !== 0) metaHtml += `<strong>Variance</strong>${dropDelta > 0 ? '+' : ''}${dropDelta}`;
+    metaHtml += `<strong>Failed Drops</strong>${failedDrops}`;
+    if (isDHL) {
+      metaHtml += `<strong>Collections</strong>${successCols} stops, ${parcelsColl} parcels`;
+    }
+    metaHtml += `<strong>Mileage</strong>${currentShift.start_mileage || '?'} → ${endMileage} (${endMileage - (currentShift.start_mileage||0)} miles)`;
+
+    document.getElementById('s-title').textContent = 'End of Day Submitted';
+    document.getElementById('s-body').textContent  = 'Your figures have been saved. Your depot lead will review and confirm.';
+    document.getElementById('s-meta').innerHTML    = metaHtml;
+    showScreen('success');
+
+  } catch(e) {
+    hideLoading();
+    showErr('Failed to save. ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Submit End of Day';
+  }
+}
+</script>
+</body>
+</html>
