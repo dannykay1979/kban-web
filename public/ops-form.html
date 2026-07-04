@@ -189,6 +189,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   <button class="tab-btn" onclick="switchTab('rota')" id="tab-rota">Rota</button>
   <button class="tab-btn" onclick="switchTab('history')" id="tab-history">History</button>
   <button class="tab-btn" onclick="switchTab('drivers')" id="tab-drivers">Drivers</button>
+  <button class="tab-btn" onclick="switchTab('mgmt')" id="tab-mgmt">Mgmt</button>
 </div>
 <div class="prog-track"><div class="prog-fill" id="prog"></div></div>
 
@@ -402,6 +403,67 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 </div><!-- /screen-drivers -->
 
 <!-- ═══════════════════════════════════════════
+     MGMT TAB
+═══════════════════════════════════════════ -->
+<div class="screen" id="screen-mgmt" style="padding:14px 14px 32px;">
+
+  <!-- Add driver form -->
+  <div class="card" style="margin-bottom:14px;">
+    <div class="ch"><div class="n">+</div><h2>Add Driver</h2></div>
+    <div class="cb">
+      <div class="r2" style="margin-bottom:10px;">
+        <div class="f">
+          <label>Driver ID <span class="r">*</span></label>
+          <input type="text" id="mg-id" placeholder="e.g. FD72579" autocomplete="off" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()">
+        </div>
+        <div class="f">
+          <label>Depot <span class="r">*</span></label>
+          <select id="mg-depot">
+            <option value="">Select…</option>
+            <option>DPD Aberdeen</option>
+            <option>DPD Edinburgh</option>
+            <option>DHL Middleton</option>
+            <option>DHL Runcorn</option>
+          </select>
+        </div>
+      </div>
+      <div class="f" style="margin-bottom:10px;">
+        <label>Full Name <span class="r">*</span></label>
+        <input type="text" id="mg-name" placeholder="e.g. Connor Smith">
+      </div>
+      <div class="f" style="margin-bottom:10px;">
+        <label>Email Address</label>
+        <input type="email" id="mg-email" placeholder="driver@email.com" autocomplete="off">
+      </div>
+      <div class="r2" style="margin-bottom:10px;">
+        <div class="f">
+          <label>PIN (4 digits) <span class="r">*</span></label>
+          <input type="password" id="mg-pin" placeholder="••••" maxlength="4" inputmode="numeric" pattern="[0-9]{4}">
+        </div>
+        <div class="f">
+          <label>Confirm PIN <span class="r">*</span></label>
+          <input type="password" id="mg-pin2" placeholder="••••" maxlength="4" inputmode="numeric" pattern="[0-9]{4}">
+        </div>
+      </div>
+      <div id="mg-err" style="display:none;background:var(--rbg);border:1px solid #fca5a5;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--red);margin-bottom:10px;"></div>
+      <button class="sbtn" onclick="addDriver()" id="mg-submit-btn">Add Driver</button>
+    </div>
+  </div>
+
+  <!-- Driver list -->
+  <div class="card">
+    <div class="ch" style="justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:9px;"><div class="n">≡</div><h2>Current Drivers</h2></div>
+      <button onclick="loadDriverList()" style="background:rgba(255,255,255,.15);border:none;color:#fff;font-size:12px;padding:4px 10px;border-radius:6px;cursor:pointer;">Refresh</button>
+    </div>
+    <div class="cb" style="padding:0;">
+      <div id="mg-list"><p style="color:var(--muted);font-size:13px;text-align:center;padding:24px;">Loading…</p></div>
+    </div>
+  </div>
+
+</div><!-- /screen-mgmt -->
+
+<!-- ═══════════════════════════════════════════
      SUCCESS
 ═══════════════════════════════════════════ -->
 <div id="success" style="display:none">
@@ -442,13 +504,14 @@ document.getElementById('r-week').value = mon.toISOString().split('T')[0];
 
 // ── Tab switching ─────────────────────────────────────────────────────────
 function switchTab(t) {
-  ['daily','plan','rota','history','drivers'].forEach(tab => {
+  ['daily','plan','rota','history','drivers','mgmt'].forEach(tab => {
     document.getElementById('screen-' + tab).className = 'screen' + (t===tab?' active':'');
     document.getElementById('tab-' + tab).className = 'tab-btn' + (t===tab?' active':'');
   });
   document.getElementById('success').style.display = 'none';
   if (t === 'history') initHistory();
   if (t === 'drivers') initDrivers();
+  if (t === 'mgmt') initMgmt();
 }
 
 // ── History ───────────────────────────────────────────────────────────────
@@ -1296,6 +1359,113 @@ async function confirmShift(shiftId) {
   } catch(e) {
     alert('Failed to save: ' + e.message);
   }
+}
+
+// ── MGMT TAB ──────────────────────────────────────────────────────────────
+
+async function sbFetchAuth(path, opts={}) {
+  const { data:{ session } } = await _sb.auth.getSession();
+  const token = session?.access_token || SUPABASE_ANON;
+  const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, {
+    ...opts,
+    headers: {
+      'apikey': SUPABASE_ANON,
+      'Authorization': 'Bearer ' + token,
+      'Content-Type': 'application/json',
+      'Prefer': opts.prefer || 'return=representation',
+      ...(opts.headers||{})
+    }
+  });
+  if (!res.ok) { const e = await res.json().catch(()=>({message:res.statusText})); throw new Error(e.message||res.statusText); }
+  return res.status === 204 ? [] : res.json();
+}
+
+async function sha256(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+function initMgmt() { loadDriverList(); }
+
+async function loadDriverList() {
+  const el = document.getElementById('mg-list');
+  el.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:24px;">Loading…</p>';
+  try {
+    const rows = await sbFetchAuth('driver_pins?select=*&order=depot.asc,driver_name.asc');
+    if (!rows.length) { el.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:24px;">No drivers added yet.</p>'; return; }
+    const depots = {};
+    rows.forEach(r => { (depots[r.depot] = depots[r.depot]||[]).push(r); });
+    let html = '';
+    Object.entries(depots).forEach(([depot, drivers]) => {
+      html += `<div style="padding:10px 14px 4px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;border-top:1px solid var(--border);">${depot}</div>`;
+      drivers.forEach(d => {
+        const active = d.active !== false;
+        html += `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid #f0f0f0;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.driver_name}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:1px;">${d.driver_id}${d.email ? ' · ' + d.email : ''}</div>
+          </div>
+          <span class="badge ${active?'badge-ok':'badge-err'}" style="flex-shrink:0;">${active?'Active':'Inactive'}</span>
+          <button onclick="toggleDriver('${d.id}', ${active})" style="background:none;border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:12px;cursor:pointer;color:${active?'var(--red)':'var(--green)'};">${active?'Deactivate':'Activate'}</button>
+        </div>`;
+      });
+    });
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<p style="color:var(--red);font-size:13px;padding:16px;">${e.message}</p>`;
+  }
+}
+
+async function addDriver() {
+  const id     = document.getElementById('mg-id').value.trim().toUpperCase();
+  const name   = document.getElementById('mg-name').value.trim();
+  const email  = document.getElementById('mg-email').value.trim();
+  const depot  = document.getElementById('mg-depot').value;
+  const pin    = document.getElementById('mg-pin').value;
+  const pin2   = document.getElementById('mg-pin2').value;
+  const errEl  = document.getElementById('mg-err');
+  const btn    = document.getElementById('mg-submit-btn');
+
+  const show = msg => { errEl.textContent = msg; errEl.style.display = 'block'; };
+  errEl.style.display = 'none';
+
+  if (!id)              return show('Driver ID is required.');
+  if (!name)            return show('Full name is required.');
+  if (!depot)           return show('Please select a depot.');
+  if (!/^\d{4}$/.test(pin)) return show('PIN must be exactly 4 digits.');
+  if (pin !== pin2)     return show('PINs do not match.');
+
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const pin_hash = await sha256(pin);
+    const client = depot.startsWith('DHL') ? 'DHL' : 'DPD';
+    await sbFetchAuth('driver_pins', {
+      method: 'POST',
+      prefer: 'return=minimal',
+      body: JSON.stringify({ driver_id: id, driver_name: name, depot, client, pin_hash, email: email||null, active: true })
+    });
+    // clear form
+    ['mg-id','mg-name','mg-email','mg-pin','mg-pin2'].forEach(f => document.getElementById(f).value = '');
+    document.getElementById('mg-depot').value = '';
+    loadDriverList();
+  } catch(e) {
+    show(e.message.includes('duplicate')
+      ? `${id} already exists for ${depot}. Deactivate the existing record first.`
+      : e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Add Driver';
+  }
+}
+
+async function toggleDriver(id, currentlyActive) {
+  try {
+    await sbFetchAuth(`driver_pins?id=eq.${id}`, {
+      method: 'PATCH',
+      prefer: 'return=minimal',
+      body: JSON.stringify({ active: !currentlyActive })
+    });
+    loadDriverList();
+  } catch(e) { alert('Failed: ' + e.message); }
 }
 
 </script>
