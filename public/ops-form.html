@@ -188,6 +188,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   <button class="tab-btn" onclick="switchTab('plan')" id="tab-plan">Weekly Plan</button>
   <button class="tab-btn" onclick="switchTab('rota')" id="tab-rota">Rota</button>
   <button class="tab-btn" onclick="switchTab('history')" id="tab-history">History</button>
+  <button class="tab-btn" onclick="switchTab('drivers')" id="tab-drivers">Drivers</button>
 </div>
 <div class="prog-track"><div class="prog-fill" id="prog"></div></div>
 
@@ -380,6 +381,27 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 </div><!-- /screen-history -->
 
 <!-- ═══════════════════════════════════════════
+     DRIVERS TAB
+═══════════════════════════════════════════ -->
+<div class="screen" id="screen-drivers" style="padding:14px 14px 32px;">
+
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+    <input type="date" id="drv-date" style="flex:1;min-width:130px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--navy);" onchange="loadDriverShifts()">
+    <select id="drv-depot" style="flex:1;min-width:140px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--navy);" onchange="loadDriverShifts()">
+      <option value="">All depots</option>
+      <option>DPD Aberdeen</option>
+      <option>DPD Edinburgh</option>
+      <option>DHL Middleton</option>
+      <option>DHL Runcorn</option>
+    </select>
+    <button onclick="loadDriverShifts()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;">Refresh</button>
+  </div>
+
+  <div id="drv-results"><p style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0;">Loading...</p></div>
+
+</div><!-- /screen-drivers -->
+
+<!-- ═══════════════════════════════════════════
      SUCCESS
 ═══════════════════════════════════════════ -->
 <div id="success" style="display:none">
@@ -420,12 +442,13 @@ document.getElementById('r-week').value = mon.toISOString().split('T')[0];
 
 // ── Tab switching ─────────────────────────────────────────────────────────
 function switchTab(t) {
-  ['daily','plan','rota','history'].forEach(tab => {
+  ['daily','plan','rota','history','drivers'].forEach(tab => {
     document.getElementById('screen-' + tab).className = 'screen' + (t===tab?' active':'');
     document.getElementById('tab-' + tab).className = 'tab-btn' + (t===tab?' active':'');
   });
   document.getElementById('success').style.display = 'none';
   if (t === 'history') initHistory();
+  if (t === 'drivers') initDrivers();
 }
 
 // ── History ───────────────────────────────────────────────────────────────
@@ -1094,6 +1117,187 @@ function showErr(msg) {
   b.textContent = '⚠ ' + msg; b.style.display = 'block';
   b.scrollIntoView({behavior:'smooth',block:'center'});
 }
+
+// ── DRIVERS TAB ───────────────────────────────────────────────────────────
+
+function initDrivers() {
+  const d = document.getElementById('drv-date');
+  if (!d.value) d.value = today.toISOString().split('T')[0];
+  loadDriverShifts();
+}
+
+async function loadDriverShifts() {
+  const date  = document.getElementById('drv-date').value;
+  const depot = document.getElementById('drv-depot').value;
+  const el    = document.getElementById('drv-results');
+  if (!date) return;
+
+  el.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0;">Loading...</p>';
+
+  try {
+    let q = `driver_shifts?shift_date=eq.${date}&order=depot.asc,driver_name.asc&select=*`;
+    if (depot) q += `&depot=eq.${encodeURIComponent(depot)}`;
+    const shifts = await sbFetch(q);
+
+    if (!shifts || shifts.length === 0) {
+      el.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0;">No driver check-ins for this date.</p>';
+      return;
+    }
+
+    // Group by depot
+    const byDepot = {};
+    shifts.forEach(s => {
+      if (!byDepot[s.depot]) byDepot[s.depot] = [];
+      byDepot[s.depot].push(s);
+    });
+
+    el.innerHTML = Object.entries(byDepot).map(([dep, list]) => `
+      <div style="margin-bottom:20px;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;">${dep}</div>
+        ${list.map(s => renderDriverCard(s)).join('')}
+      </div>
+    `).join('');
+  } catch(e) {
+    el.innerHTML = '<p style="color:#991b1b;font-size:13px;text-align:center;padding:32px 0;">Error: ' + e.message + '</p>';
+  }
+}
+
+function renderDriverCard(s) {
+  const statusColour = {
+    pending:        ['#6b7280','#f3f4f6'],
+    sod_complete:   ['#1d4ed8','#dbeafe'],
+    eod_complete:   ['#d97706','#fef3c7'],
+    lead_confirmed: ['#16a34a','#dcfce7'],
+  }[s.status] || ['#6b7280','#f3f4f6'];
+
+  const statusLabel = {
+    pending:        'Pending',
+    sod_complete:   'Out on round',
+    eod_complete:   'EOD submitted',
+    lead_confirmed: 'Confirmed',
+  }[s.status] || s.status;
+
+  const badge = `<span style="background:${statusColour[1]};color:${statusColour[0]};border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;">${statusLabel}</span>`;
+
+  const fmt = v => v ? v.slice(0,5) : '--';
+  const fmtDate = d => d ? new Date(d).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '--';
+
+  let body = '';
+
+  // SOD summary (shown for all statuses after pending)
+  if (s.status !== 'pending') {
+    body += `
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;font-size:12px;">
+        <div><div style="color:var(--muted);font-size:10px;text-transform:uppercase;font-weight:700;">At Depot</div><div style="font-weight:600;">${fmt(s.time_at_depot)}</div></div>
+        <div><div style="color:var(--muted);font-size:10px;text-transform:uppercase;font-weight:700;">Drops</div><div style="font-weight:600;">${s.delivery_drops_planned || '--'}</div></div>
+        <div><div style="color:var(--muted);font-size:10px;text-transform:uppercase;font-weight:700;">Parcels</div><div style="font-weight:600;">${s.parcel_count || '--'}</div></div>
+      </div>`;
+
+    if (s.day_type !== 'standard') {
+      body += `<div style="background:var(--abg);border-radius:7px;padding:7px 10px;font-size:12px;color:#92400e;margin-bottom:10px;">Training day: ${s.day_type.replace(/_/g,' ')}</div>`;
+    }
+
+    // Departure time row
+    const depSet = s.depot_departure_time;
+    body += `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+        <div style="font-size:12px;color:var(--muted);flex-shrink:0;">Departure:</div>
+        ${depSet
+          ? `<span style="font-weight:700;font-size:13px;">${fmt(depSet)}</span><span style="font-size:11px;color:var(--muted);margin-left:4px;">set by ${s.departure_set_by||'lead'}</span>`
+          : `<input type="time" id="dep-time-${s.id}" style="width:110px;padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;">
+             <button onclick="setDeparture('${s.id}')" style="background:var(--blue);color:#fff;border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">Set</button>`
+        }
+      </div>`;
+  }
+
+  // EOD summary + sign-off (shown when eod_complete or lead_confirmed)
+  if (s.status === 'eod_complete' || s.status === 'lead_confirmed') {
+    const variance = (s.successful_delivery_drops || 0) - (s.delivery_drops_planned || 0);
+    const varColour = variance < 0 ? 'var(--red)' : variance > 0 ? 'var(--green)' : 'var(--muted)';
+    body += `
+      <div style="background:var(--bg);border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;">
+          <div><div style="color:var(--muted);font-size:10px;text-transform:uppercase;font-weight:700;">Success</div><div style="font-weight:700;">${s.successful_delivery_drops ?? '--'}</div></div>
+          <div><div style="color:var(--muted);font-size:10px;text-transform:uppercase;font-weight:700;">Failed</div><div style="font-weight:700;color:${s.failed_delivery_drops > 0 ? 'var(--red)' : 'inherit'}">${s.failed_delivery_drops ?? '--'}</div></div>
+          <div><div style="color:var(--muted);font-size:10px;text-transform:uppercase;font-weight:700;">Variance</div><div style="font-weight:700;color:${varColour}">${variance > 0 ? '+' : ''}${variance}</div></div>
+          <div><div style="color:var(--muted);font-size:10px;text-transform:uppercase;font-weight:700;">Miles</div><div style="font-weight:700;">${s.end_mileage && s.start_mileage ? s.end_mileage - s.start_mileage : '--'}</div></div>
+        </div>
+        ${s.failed_delivery_reason ? `<div style="margin-top:8px;color:var(--muted);">Failed reason: ${s.failed_delivery_reason}</div>` : ''}
+        ${s.client === 'DHL' ? `<div style="margin-top:6px;color:var(--muted);">Collections: ${s.successful_collection_stops||0} stops, ${s.parcels_collected||0} items</div>` : ''}
+        <div style="margin-top:6px;color:var(--muted);">Last delivery: ${fmt(s.time_last_delivery)} &nbsp;·&nbsp; Back at depot: ${fmt(s.time_at_depot_eod)}</div>
+      </div>`;
+
+    if (s.status === 'eod_complete') {
+      body += `
+        <div style="margin-bottom:8px;">
+          <textarea id="lead-notes-${s.id}" placeholder="Lead notes (optional)" rows="2" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:none;"></textarea>
+        </div>
+        <button onclick="confirmShift('${s.id}')" style="width:100%;background:var(--green);color:#fff;border:none;border-radius:9px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;">Confirm &amp; Sign Off</button>`;
+    } else {
+      body += `<div style="font-size:12px;color:var(--green);font-weight:600;">✓ Confirmed by ${s.lead_confirmed_by || 'lead'} at ${fmtDate(s.lead_confirmed_at)}</div>`;
+      if (s.lead_notes) body += `<div style="font-size:12px;color:var(--muted);margin-top:4px;">Notes: ${s.lead_notes}</div>`;
+    }
+  }
+
+  return `
+    <div style="background:var(--white);border-radius:10px;box-shadow:var(--sh);margin-bottom:10px;overflow:hidden;" id="dcard-${s.id}">
+      <div style="background:var(--navy);padding:10px 13px;display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div style="color:#fff;font-weight:700;font-size:14px;">${s.driver_name}</div>
+          <div style="color:rgba(255,255,255,.5);font-size:11px;">${s.driver_id}</div>
+        </div>
+        ${badge}
+      </div>
+      <div style="padding:13px;">${body || '<p style="color:var(--muted);font-size:13px;">Driver has not checked in yet.</p>'}</div>
+    </div>`;
+}
+
+async function setDeparture(shiftId) {
+  const timeEl = document.getElementById('dep-time-' + shiftId);
+  const time = timeEl ? timeEl.value : '';
+  if (!time) { alert('Please enter a departure time.'); return; }
+
+  const { data:{ session } } = await _sb.auth.getSession();
+  const setBy = session?.user?.email || 'lead';
+
+  try {
+    await sbFetch(`driver_shifts?id=eq.${shiftId}`, {
+      method: 'PATCH',
+      prefer: 'return=minimal',
+      body: JSON.stringify({
+        depot_departure_time: time,
+        departure_set_by: setBy,
+        departure_set_at: new Date().toISOString(),
+      }),
+    });
+    loadDriverShifts();
+  } catch(e) {
+    alert('Failed to save: ' + e.message);
+  }
+}
+
+async function confirmShift(shiftId) {
+  const notes = (document.getElementById('lead-notes-' + shiftId)?.value || '').trim();
+  const { data:{ session } } = await _sb.auth.getSession();
+  const confirmedBy = session?.user?.email || 'lead';
+
+  try {
+    await sbFetch(`driver_shifts?id=eq.${shiftId}`, {
+      method: 'PATCH',
+      prefer: 'return=minimal',
+      body: JSON.stringify({
+        status: 'lead_confirmed',
+        lead_confirmed_by: confirmedBy,
+        lead_confirmed_at: new Date().toISOString(),
+        lead_notes: notes || null,
+      }),
+    });
+    loadDriverShifts();
+  } catch(e) {
+    alert('Failed to save: ' + e.message);
+  }
+}
+
 </script>
 </body>
 </html>
