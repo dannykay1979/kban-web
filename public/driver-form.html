@@ -139,9 +139,10 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
         </select>
       </div>
       <div class="f" id="login-driver-wrap" style="display:none">
-        <label>Driver ID <span class="r">*</span></label>
-        <input type="text" id="login-driver-id" placeholder="e.g. FD72579 or MD Temp 4" autocomplete="off" autocapitalize="characters" oninput="this.value=this.value.toUpperCase();clearPin()">
-        <div class="hint">Your route ID or temp ID for today</div>
+        <label>Your Name <span class="r">*</span></label>
+        <select id="login-driver-name" onchange="onDriverNameChange()">
+          <option value="">Select your name...</option>
+        </select>
       </div>
       <div id="pin-section" style="display:none">
         <div class="div"></div>
@@ -197,6 +198,11 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   <div class="card" id="sod-route-card">
     <div class="ch"><h2>Route &amp; Timing</h2></div>
     <div class="cb">
+      <div class="f">
+        <label>Today's Route / Temp ID <span class="r">*</span></label>
+        <input type="text" id="sod-route-id" placeholder="e.g. FD72579 or MD Temp 4" autocomplete="off" autocapitalize="characters" oninput="this.value=this.value.toUpperCase()">
+        <div class="hint">Enter the ID on your card today — permanent or temp</div>
+      </div>
       <div class="r2">
         <div class="f">
           <label>Time at Depot <span class="r">*</span></label>
@@ -450,20 +456,36 @@ function showErr(msg) {
 function clearErr() { document.getElementById('err-bar').style.display = 'none'; }
 
 // ── Login flow ────────────────────────────────────────────────────────────
-function onLoginDepotChange() {
+async function onLoginDepotChange() {
   const depot = document.getElementById('login-depot').value;
-  document.getElementById('login-driver-wrap').style.display = depot ? '' : 'none';
+  const wrap  = document.getElementById('login-driver-wrap');
+  const sel   = document.getElementById('login-driver-name');
   document.getElementById('pin-section').style.display = 'none';
   clearPin();
+
+  if (!depot) { wrap.style.display = 'none'; return; }
+
+  wrap.style.display = '';
+  sel.innerHTML = '<option value="">Loading drivers...</option>';
+
+  try {
+    const rows = await sbFetch(`driver_pins?depot=eq.${encodeURIComponent(depot)}&active=eq.true&select=driver_name&order=driver_name.asc`);
+    sel.innerHTML = '<option value="">Select your name...</option>' +
+      (rows || []).map(r => `<option value="${escHtml(r.driver_name)}">${escHtml(r.driver_name)}</option>`).join('');
+  } catch(e) {
+    sel.innerHTML = '<option value="">Could not load — check connection</option>';
+  }
 }
 
-function onDriverIdInput() {
-  const id = document.getElementById('login-driver-id').value.trim();
-  document.getElementById('pin-section').style.display = id.length >= 2 ? '' : 'none';
+function onDriverNameChange() {
+  const name = document.getElementById('login-driver-name').value;
+  document.getElementById('pin-section').style.display = name ? '' : 'none';
   clearPin();
 }
 
-document.getElementById('login-driver-id').addEventListener('input', onDriverIdInput);
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
 // ── PIN pad ───────────────────────────────────────────────────────────────
 function clearPin() {
@@ -492,9 +514,9 @@ function pinDel() {
 }
 
 async function attemptLogin() {
-  const depot    = document.getElementById('login-depot').value;
-  const driverId = document.getElementById('login-driver-id').value.trim().toUpperCase();
-  if (!depot || !driverId || pin.length !== 4) return;
+  const depot      = document.getElementById('login-depot').value;
+  const driverName = document.getElementById('login-driver-name').value;
+  if (!depot || !driverName || pin.length !== 4) return;
 
   clearErr();
   showLoading('Verifying...');
@@ -502,51 +524,36 @@ async function attemptLogin() {
   try {
     const hash = await sha256(pin);
 
-    // ── TEST MODE: full bypass (no Supabase calls) ─────────────────────────
-    // Remove this block before going live. Test: Driver ID = TEST01, PIN = 1234
-    const TEST_HASH = '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4';
-    const isTestMode = (driverId === 'TEST01' && hash === TEST_HASH);
-    // ── END TEST MODE ──────────────────────────────────────────────────────
-
-    let rows;
-    if (isTestMode) {
-      rows = [{ driver_id: 'TEST01', driver_name: 'Test Driver', depot, client: depot.startsWith('DHL') ? 'DHL' : 'DPD', active: true }];
-    } else {
-      rows = await sbFetch(`driver_pins?driver_id=eq.${encodeURIComponent(driverId)}&depot=eq.${encodeURIComponent(depot)}&pin_hash=eq.${encodeURIComponent(hash)}&active=eq.true&select=*`);
-    }
+    const rows = await sbFetch(
+      `driver_pins?driver_name=eq.${encodeURIComponent(driverName)}&depot=eq.${encodeURIComponent(depot)}&pin_hash=eq.${encodeURIComponent(hash)}&active=eq.true&select=*`
+    );
 
     if (!rows || rows.length === 0) {
       hideLoading();
       clearPin();
-      showErr('Incorrect PIN or driver ID. Please try again.');
+      showErr('Incorrect PIN. Please try again.');
       return;
     }
 
     const driver = rows[0];
-    currentDriver = { id: driver.driver_id, name: driver.driver_name, depot: driver.depot, client: driver.client };
+    currentDriver = { id: driver.driver_id || null, name: driver.driver_name, depot: driver.depot, client: driver.client };
 
     // Check for existing shift today
     const todayStr = today.toISOString().split('T')[0];
-    let shifts;
-    if (isTestMode) {
-      shifts = []; // No existing shift in test mode — always go to SOD
-    } else {
-      shifts = await sbFetch(`driver_shifts?driver_id=eq.${encodeURIComponent(driverId)}&shift_date=eq.${todayStr}&select=*`);
-    }
+    const shifts = await sbFetch(
+      `driver_shifts?driver_name=eq.${encodeURIComponent(driverName)}&shift_date=eq.${todayStr}&select=*`
+    );
     currentShift = shifts && shifts.length > 0 ? shifts[0] : null;
 
     hideLoading();
 
     if (!currentShift) {
-      // No shift yet — show Start of Day
       buildDayTypeGrid(driver.client);
       document.getElementById('sod-welcome').textContent = `Good morning, ${driver.driver_name}. Complete your start-of-day details below before departing.`;
-      // Show/hide collections for DHL
       document.getElementById('sod-collections-wrap').style.display = driver.client === 'DHL' ? '' : 'none';
       document.getElementById('hdr-sub').textContent = driver.driver_name + ' · ' + driver.depot;
       showScreen('sod');
     } else if (currentShift.status === 'sod_complete') {
-      // SOD done, not yet EOD
       renderWaitingScreen();
     } else if (currentShift.status === 'eod_complete') {
       showErr('Your end-of-day for today has already been submitted. Contact your depot lead if you need to make a correction.');
@@ -589,6 +596,7 @@ async function submitSOD() {
   const isTraining = dayType !== 'standard';
 
   if (!isTraining) {
+    const routeId       = document.getElementById('sod-route-id').value.trim().toUpperCase();
     const timeAtDepot   = document.getElementById('sod-time-at-depot').value;
     const plannedReturn = document.getElementById('sod-planned-return').value;
     const postcodes     = document.getElementById('sod-postcodes').value.trim();
@@ -596,6 +604,7 @@ async function submitSOD() {
     const deliveryDrops = document.getElementById('sod-delivery-drops').value;
     const parcelCount   = document.getElementById('sod-parcel-count').value;
 
+    if (!routeId)       return showErr('Please enter your route/temp ID for today.');
     if (!timeAtDepot)   return showErr('Please enter your time at depot.');
     if (!plannedReturn) return showErr('Please enter your planned return time.');
     if (!postcodes)     return showErr('Please enter your postcodes or route area.');
@@ -613,7 +622,7 @@ async function submitSOD() {
     const todayStr = today.toISOString().split('T')[0];
     const payload = {
       shift_date:   todayStr,
-      driver_id:    currentDriver.id,
+      driver_id:    currentDriver.id || null,
       driver_name:  currentDriver.name,
       depot:        currentDriver.depot,
       client:       currentDriver.client,
@@ -623,6 +632,7 @@ async function submitSOD() {
     };
 
     if (!isTraining) {
+      payload.reported_id               = document.getElementById('sod-route-id').value.trim().toUpperCase() || null;
       payload.time_at_depot             = document.getElementById('sod-time-at-depot').value || null;
       payload.planned_return_time       = document.getElementById('sod-planned-return').value || null;
       payload.postcodes                 = document.getElementById('sod-postcodes').value.trim() || null;
@@ -632,17 +642,11 @@ async function submitSOD() {
       payload.collection_stops_planned  = parseInt(document.getElementById('sod-collection-stops').value) || null;
     }
 
-    let result;
-    if (currentDriver.id === 'TEST01') {
-      // TEST MODE: skip Supabase write entirely
-      result = [{ ...payload, id: 'test-shift-' + Date.now() }];
-    } else {
-      result = await sbFetch('driver_shifts', {
-        method: 'POST',
-        prefer: 'return=representation',
-        body: JSON.stringify(payload),
-      });
-    }
+    const result = await sbFetch('driver_shifts', {
+      method: 'POST',
+      prefer: 'return=representation',
+      body: JSON.stringify(payload),
+    });
     currentShift = Array.isArray(result) ? result[0] : result;
     hideLoading();
     renderWaitingScreen();
@@ -663,6 +667,7 @@ function renderWaitingScreen() {
   html += `<strong>Depot</strong>${s.depot}`;
   html += `<strong>Day Type</strong>${DAY_TYPES.find(t=>t.key===s.day_type)?.label || s.day_type}`;
   if (s.day_type === 'standard') {
+    if (s.reported_id)            html += `<strong>Today's Route/Temp ID</strong>${s.reported_id}`;
     if (s.time_at_depot)          html += `<strong>Arrived at Depot</strong>${s.time_at_depot}`;
     if (s.delivery_drops_planned) html += `<strong>Delivery Drops Declared</strong>${s.delivery_drops_planned}`;
     if (s.parcel_count)           html += `<strong>Parcel Count</strong>${s.parcel_count}`;
@@ -681,7 +686,7 @@ function showEOD() {
   const s = currentShift;
 
   // Banner summary of SOD
-  let banner = `Route: ${s.postcodes || 'Training day'}`;
+  let banner = `ID: ${s.reported_id || '?'} · Route: ${s.postcodes || 'Training day'}`;
   if (s.delivery_drops_planned) banner += ` · ${s.delivery_drops_planned} drops planned`;
   if (s.start_mileage)          banner += ` · Started at ${s.start_mileage} miles`;
   document.getElementById('eod-summary-banner').textContent = banner;
@@ -757,13 +762,11 @@ async function submitEOD() {
       payload.failed_collection_reason    = failedColReason || null;
     }
 
-    if (currentDriver.id !== 'TEST01') {
-      await sbFetch(`driver_shifts?id=eq.${currentShift.id}`, {
-        method:  'PATCH',
-        prefer:  'return=representation',
-        body:    JSON.stringify(payload),
-      });
-    }
+    await sbFetch(`driver_shifts?id=eq.${currentShift.id}`, {
+      method:  'PATCH',
+      prefer:  'return=representation',
+      body:    JSON.stringify(payload),
+    });
 
     hideLoading();
 

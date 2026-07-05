@@ -1291,10 +1291,15 @@ function renderDriverCard(s) {
       </div>`;
 
     if (s.status === 'eod_complete') {
+      const idLabel = s.reported_id ? `Route/Temp ID <strong>${s.reported_id}</strong> is correct` : 'ID has been checked and verified';
       body += `
         <div style="margin-bottom:8px;">
           <textarea id="lead-notes-${s.id}" placeholder="Lead notes (optional)" rows="2" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:none;"></textarea>
         </div>
+        <label style="display:flex;align-items:center;gap:8px;padding:8px 0;font-size:13px;font-weight:600;color:var(--navy);cursor:pointer;margin-bottom:8px;">
+          <input type="checkbox" id="id-confirm-${s.id}" style="width:18px;height:18px;cursor:pointer;accent-color:var(--green);">
+          I confirm ${idLabel}
+        </label>
         <button onclick="confirmShift('${s.id}')" style="width:100%;background:var(--green);color:#fff;border:none;border-radius:9px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;">Confirm &amp; Sign Off</button>`;
     } else {
       body += `<div style="font-size:12px;color:var(--green);font-weight:600;">✓ Confirmed by ${s.lead_confirmed_by || 'lead'} at ${fmtDate(s.lead_confirmed_at)}</div>`;
@@ -1307,7 +1312,7 @@ function renderDriverCard(s) {
       <div style="background:var(--navy);padding:10px 13px;display:flex;justify-content:space-between;align-items:center;">
         <div>
           <div style="color:#fff;font-weight:700;font-size:14px;">${s.driver_name}</div>
-          <div style="color:rgba(255,255,255,.5);font-size:11px;">${s.driver_id}</div>
+          <div style="color:rgba(255,255,255,.5);font-size:11px;">${s.reported_id ? 'Today: ' + s.reported_id : (s.driver_id || 'No ID recorded')}</div>
         </div>
         ${badge}
       </div>
@@ -1340,6 +1345,11 @@ async function setDeparture(shiftId) {
 }
 
 async function confirmShift(shiftId) {
+  const idCheckEl = document.getElementById('id-confirm-' + shiftId);
+  if (idCheckEl && !idCheckEl.checked) {
+    alert("Please confirm the driver's Route/Temp ID before signing off.");
+    return;
+  }
   const notes = (document.getElementById('lead-notes-' + shiftId)?.value || '').trim();
   const { data:{ session } } = await _sb.auth.getSession();
   const confirmedBy = session?.user?.email || 'lead';
@@ -1353,6 +1363,7 @@ async function confirmShift(shiftId) {
         lead_confirmed_by: confirmedBy,
         lead_confirmed_at: new Date().toISOString(),
         lead_notes: notes || null,
+        id_confirmed: !!(idCheckEl?.checked),
       }),
     });
     loadDriverShifts();
