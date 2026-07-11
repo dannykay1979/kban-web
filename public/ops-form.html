@@ -863,13 +863,9 @@ function renderDailyDrivers(plan, date) {
         </div>
         <div class="div"></div>
         <div class="f">
-          <label>${isDHL ? 'Temp ID (if different from plan)' : 'DPD Driver ID (if different from plan)'}</label>
-          <input type="text" id="${id}-day-id" placeholder="${isDHL ? 'e.g. MD Temp 4' : 'e.g. FD72579 / Driver ID'}">
-          <div class="hint">Leave blank if same as plan</div>
-        </div>
-        <div class="r2">
-          <div class="f"><label>Actual Departure</label><input type="time" id="${id}-depart"></div>
-          <div class="f"><label>Departure Notes</label><input type="text" id="${id}-depart-note" placeholder="Optional"></div>
+          <label>ID Number Used</label>
+          <input type="text" id="${id}-day-id" placeholder="Enter full ID number (temp or perm)">
+          <div class="hint">Record full ID number used today, whether temp or permanent</div>
         </div>
       </div>`;
     container.appendChild(div);
@@ -917,7 +913,7 @@ function addUnplannedDriver() {
       </div>
       <div class="r2">
         <div class="f"><label>Fuel Card</label><input type="text" id="${id}-card" placeholder="Card no." inputmode="numeric"></div>
-        <div class="f"><label>${isDHL?'Temp ID':'Route ID'}</label><input type="text" id="${id}-rid" placeholder="${isDHL?'e.g. MD Temp 4':'e.g. FD72579'}"></div>
+        <div class="f"><label>${isDHL?'Temp or Perm ID Number':'Route ID'}</label><input type="text" id="${id}-rid" placeholder="${isDHL?'Full temp or perm ID':'e.g. FD72579'}"></div>
       </div>
       <div class="r2">
         <div class="f"><label>Departure</label><input type="time" id="${id}-dep"></div>
@@ -1093,7 +1089,7 @@ function addPlanDriver(prefill={}) {
       </div>
       <div class="r2">
         <div class="f"><label>Fuel Card No.</label><input type="text" id="pd-${n}-card" value="${prefill.fuel_card||''}" placeholder="Card number" inputmode="numeric"></div>
-        <div class="f"><label>${isDHL?'Temp ID':'Route ID'}</label><input type="text" id="pd-${n}-rid" value="${prefill.temp_id||prefill.route_id||''}" placeholder="${isDHL?'e.g. MD Temp 4':'e.g. FD72579'}"></div>
+        <div class="f"><label>${isDHL?'Temp or Perm ID Number':'Route ID'}</label><input type="text" id="pd-${n}-rid" value="${prefill.temp_id||prefill.route_id||''}" placeholder="${isDHL?'Full temp or perm ID':'e.g. FD72579'}"></div>
       </div>
       <div class="f">
         <label>Operating Days</label>
