@@ -254,17 +254,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
           <textarea id="bay-notes" placeholder="Duration and reason, e.g. 25 mins, previous contractor still on bay..."></textarea>
         </div>
       </div>
-      <div class="div"></div>
-      <div class="f">
-        <label>Sortation Completed Before Dispatch?</label>
-        <div class="yn">
-          <button class="yb" id="sort-yes" onclick="yn('sort','yes')">Yes</button>
-          <button class="yb" id="sort-no"  onclick="yn('sort','no')">No</button>
-        </div>
-        <div class="cond" id="sort-det">
-          <textarea id="sort-notes" placeholder="What was incomplete, impact on dispatch..."></textarea>
-        </div>
-      </div>
+
     </div>
   </div>
 
@@ -868,18 +858,8 @@ function renderDailyDrivers(plan, date) {
         </div>
         <div class="div"></div>
         <div class="f">
-          <label>Fuel Card Exception?</label>
-          <div class="yn">
-            <button class="yb" id="${id}-fc-no"  onclick="ynLocal('${id}-fc','no')">No</button>
-            <button class="yb" id="${id}-fc-yes" onclick="ynLocal('${id}-fc','yes')">Yes</button>
-          </div>
-          <div class="hint">Only flag if card was lost, swapped, or used by someone else</div>
-        </div>
-        <div class="cond" id="${id}-fc-yes-det">
-          <div class="r2" style="margin-top:8px">
-            <div class="f"><label>Card Actually Used</label><input type="text" id="${id}-card-used" placeholder="Card number" inputmode="numeric"></div>
-            <div class="f"><label>Reason</label><input type="text" id="${id}-card-reason" placeholder="Lost, cross usage..."></div>
-          </div>
+          <label>Fuel Card Number</label>
+          <input type="text" id="${id}-card-used" placeholder="Card number" inputmode="numeric">
         </div>
         <div class="div"></div>
         <div class="f">
@@ -974,7 +954,6 @@ function collectDaily() {
     const status = document.getElementById(id+'-status')?.value || 'present';
     const wrYes = document.getElementById(id+'-wr-yes')?.classList.contains('yes');
     const wrNo  = document.getElementById(id+'-wr-no')?.classList.contains('no');
-    const fcYes = document.getElementById(id+'-fc-yes')?.classList.contains('yes');
     const covYes = document.getElementById(id+'-cov-yes')?.classList.contains('yes');
     const covNo  = document.getElementById(id+'-cov-no')?.classList.contains('no');
     const notifYes = document.getElementById(id+'-notif-yes')?.classList.contains('yes');
@@ -990,9 +969,7 @@ function collectDaily() {
       late_reason: document.getElementById(id+'-late-reason')?.value||'',
       walk_round_done: wrYes?'Yes':wrNo?'No':'',
       defects: document.getElementById(id+'-defects')?.value||'',
-      fuel_card_exception: fcYes?'Yes':'No',
-      fuel_card_used: document.getElementById(id+'-card-used')?.value||'',
-      fuel_card_reason: document.getElementById(id+'-card-reason')?.value||'',
+      fuel_card_number: document.getElementById(id+'-card-used')?.value||'',
       day_id_override: document.getElementById(id+'-day-id')?.value||'',
       departure_time: document.getElementById(id+'-depart')?.value||'',
       departure_notes: document.getElementById(id+'-depart-note')?.value||'',
@@ -1018,8 +995,7 @@ function collectDaily() {
     submitted_by: document.getElementById('d-sub').value,
     bay_available: ynState.bay !== 'no',
     bay_delay_notes: document.getElementById('bay-notes').value||null,
-    sortation_done: ynState.sort !== 'no',
-    sortation_notes: document.getElementById('sort-notes').value||null,
+
     drivers, other_notes: document.getElementById('other-notes').value||null,
     plan_id: currentPlan?.id || null,
   };
@@ -1037,7 +1013,7 @@ async function submitDaily() {
       body: JSON.stringify({
         depot: data.depot, ops_date: data.ops_date, submitted_by: data.submitted_by||null,
         bay_available: data.bay_available, bay_delay_notes: data.bay_delay_notes,
-        sortation_done: data.sortation_done, sortation_notes: data.sortation_notes,
+
         drivers: data.drivers, other_notes: data.other_notes, plan_id: data.plan_id,
       }),
     });
@@ -1071,7 +1047,6 @@ function resetDaily() {
   document.getElementById('plan-status').innerHTML = '';
   document.getElementById('other-notes').value = '';
   document.getElementById('bay-notes').value = '';
-  document.getElementById('sort-notes').value = '';
   ynState = {bay:null,sort:null}; currentPlan = null; unplannedN = 0;
   ['bay','sort'].forEach(k => {
     ['yes','no'].forEach(v => { const el = document.getElementById(k+'-'+v); if(el) el.className='yb'; });
