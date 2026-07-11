@@ -188,7 +188,6 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   <button class="tab-btn" onclick="switchTab('plan')" id="tab-plan">Weekly Plan</button>
   <button class="tab-btn" onclick="switchTab('rota')" id="tab-rota">Rota</button>
   <button class="tab-btn" onclick="switchTab('history')" id="tab-history">History</button>
-  <button class="tab-btn" onclick="switchTab('departure')" id="tab-departure">Departure</button>
   <button class="tab-btn" onclick="switchTab('drivers')" id="tab-drivers">Drivers</button>
   <button class="tab-btn" onclick="switchTab('mgmt')" id="tab-mgmt">Mgmt</button>
 </div>
@@ -373,26 +372,6 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 </div><!-- /screen-history -->
 
 <!-- ═══════════════════════════════════════════
-     DEPARTURE TAB
-═══════════════════════════════════════════ -->
-<div class="screen" id="screen-departure" style="padding:16px;">
-  <div class="card" style="margin-bottom:14px;">
-    <div class="card-title"><span class="step-num">1</span>Select Depot &amp; Date</div>
-    <div class="r2">
-      <div class="f"><label>Depot</label>
-        <select id="dep-depot" onchange="loadDepartureDrivers()" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--navy);">
-          <option value="">Select depot...</option><option>DHL Middleton</option><option>DHL Runcorn</option><option>DPD Aberdeen</option><option>DPD Edinburgh</option>
-        </select>
-      </div>
-      <div class="f"><label>Date</label>
-        <input type="date" id="dep-date" onchange="loadDepartureDrivers()" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--navy);">
-      </div>
-    </div>
-  </div>
-  <div id="dep-drivers"><p style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0;">Select a depot and date to load drivers.</p></div>
-</div><!-- /screen-departure -->
-
-<!-- ═══════════════════════════════════════════
      DRIVERS TAB
 ═══════════════════════════════════════════ -->
 <div class="screen" id="screen-drivers" style="padding:14px 14px 32px;">
@@ -515,13 +494,12 @@ document.getElementById('r-week').value = mon.toISOString().split('T')[0];
 
 // ── Tab switching ─────────────────────────────────────────────────────────
 function switchTab(t) {
-  ['daily','plan','rota','history','departure','drivers','mgmt'].forEach(tab => {
+  ['daily','plan','rota','history','drivers','mgmt'].forEach(tab => {
     document.getElementById('screen-' + tab).className = 'screen' + (t===tab?' active':'');
     document.getElementById('tab-' + tab).className = 'tab-btn' + (t===tab?' active':'');
   });
   document.getElementById('success').style.display = 'none';
   if (t === 'history') initHistory();
-  if (t === 'departure') initDeparture();
   if (t === 'drivers') initDrivers();
   if (t === 'mgmt') initMgmt();
 }
@@ -1472,53 +1450,7 @@ async function toggleDriver(id, currentlyActive) {
   } catch(e) { alert('Failed: ' + e.message); }
 }
 
-// ── Departure Tab ─────────────────────────────────────────────────────────
-function initDeparture(){
-  const d=document.getElementById('dep-date');
-  if(!d.value)d.value=new Date().toISOString().split('T')[0];
-  loadDepartureDrivers();
-}
-async function loadDepartureDrivers(){
-  const depot=document.getElementById('dep-depot').value;
-  const date=document.getElementById('dep-date').value;
-  const el=document.getElementById('dep-drivers');
-  if(!depot||!date)return;
-  el.innerHTML='<p style="color:var(--muted);font-size:13px;text-align:center;padding:24px 0;">Loading...</p>';
-  try{
-    const rows=await sbFetch('daily_ops?depot=eq.'+encodeURIComponent(depot)+'&ops_date=eq.'+date+'&select=*&limit=1');
-    if(!rows||!rows.length){el.innerHTML='<p style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0;">No Daily Ops submission found. Submit the morning sheet first.</p>';return;}
-    const ops=rows[0];
-    const drivers=Array.isArray(ops.drivers)?ops.drivers.filter(function(d){return d.status!=='absent';}):[]; 
-    if(!drivers.length){el.innerHTML='<p style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0;">No active drivers found.</p>';return;}
-    const deps=await sbFetch('driver_departures?ops_id=eq.'+ops.id+'&select=*');
-    const depMap={};
-    (deps||[]).forEach(function(d){depMap[d.driver_name]=d;});
-    el.innerHTML='<div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:12px;">Record Departure Times</div>'+
-      drivers.map(function(dr){
-        const existing=depMap[dr.name];
-        const saved=existing?existing.departure_time:'';
-        const savedNote=existing?(existing.notes||''):'';
-        const badge=existing?'<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">RECORDED</span>':'<span style="background:#f3f4f6;color:#6b7280;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">PENDING</span>';
-        const safeKey=dr.name.replace(/ /g,'_').replace(/[^a-zA-Z0-9_]/g,'');
-        return '<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:10px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div><div style="font-weight:700;font-size:14px;color:var(--navy);">'+dr.name+'</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Start: '+(dr.start_time||'—')+' · ID: '+(dr.day_id||dr.planned_id||'—')+'</div></div>'+badge+'</div><div class="r2"><div class="f"><label>Departure Time</label><input type="time" id="dep-time-'+safeKey+'" value="'+saved+'" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;"></div><div class="f"><label>Notes (optional)</label><input type="text" id="dep-note-'+safeKey+'" value="'+savedNote+'" placeholder="Any delay reason..." style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;"></div></div><button onclick="saveDeparture(\''+ops.id+'\',\''+dr.name.replace(/'/g,"\\'")+'\',\''+depot+'\',\''+date+'\')" style="margin-top:10px;width:100%;background:var(--blue);color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:600;cursor:pointer;">Save Departure</button></div>';
-      }).join('');
-  }catch(e){el.innerHTML='<p style="color:#991b1b;font-size:13px;text-align:center;padding:32px 0;">Error: '+e.message+'</p>';}
-}
-async function saveDeparture(opsId,driverName,depot,date){
-  const safeKey=driverName.replace(/ /g,'_').replace(/[^a-zA-Z0-9_]/g,'');
-  const depTime=document.getElementById('dep-time-'+safeKey)?.value;
-  const depNote=document.getElementById('dep-note-'+safeKey)?.value||'';
-  if(!depTime){alert('Please enter a departure time.');return;}
-  try{
-    const existing=await sbFetch('driver_departures?ops_id=eq.'+opsId+'&driver_name=eq.'+encodeURIComponent(driverName)+'&select=id&limit=1');
-    if(existing&&existing.length){
-      await sbFetch('driver_departures?id=eq.'+existing[0].id,{method:'PATCH',body:JSON.stringify({departure_time:depTime,notes:depNote,updated_at:new Date().toISOString()})});
-    }else{
-      await sbFetch('driver_departures',{method:'POST',body:JSON.stringify({ops_id:opsId,driver_name:driverName,depot:depot,ops_date:date,departure_time:depTime,notes:depNote})});
-    }
-    loadDepartureDrivers();
-  }catch(e){alert('Error saving: '+e.message);}
-}
+
 
 </script>
 </body>
