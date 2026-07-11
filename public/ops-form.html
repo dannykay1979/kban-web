@@ -190,7 +190,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   <button class="tab-btn" onclick="switchTab('history')" id="tab-history">History</button>
   <button class="tab-btn" onclick="switchTab('drivers')" id="tab-drivers">Drivers</button>
   <button class="tab-btn" onclick="switchTab('mgmt')" id="tab-mgmt">Mgmt</button>
-  <button class="tab-btn" onclick="switchTab('mi')" id="tab-mi">MI</button>
+  <button class="tab-btn" onclick="switchTab('mi')" id="tab-mi">Daily MI</button>
+  <button class="tab-btn" onclick="switchTab('weekly-mi')" id="tab-weekly-mi">Weekly MI</button>
 </div>
 <div class="prog-track"><div class="prog-fill" id="prog"></div></div>
 
@@ -479,6 +480,32 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 </div><!-- /screen-mi -->
 
 <!-- ═══════════════════════════════════════════
+     WEEKLY MI TAB
+═══════════════════════════════════════════ -->
+<div class="screen" id="screen-weekly-mi" style="padding:14px 14px 32px;">
+
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+    <select id="wmi-depot" style="flex:1;min-width:130px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--navy);">
+      <option value="">All depots</option>
+      <option>DHL Middleton</option>
+      <option>DHL Runcorn</option>
+      <option>DPD Aberdeen</option>
+      <option>DPD Edinburgh</option>
+    </select>
+    <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:200px;">
+      <label style="font-size:12px;color:var(--muted);white-space:nowrap;">Week of</label>
+      <input type="date" id="wmi-week" style="flex:1;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--navy);">
+    </div>
+    <button onclick="loadWeeklyMI()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">Load Report</button>
+  </div>
+
+  <div id="wmi-results">
+    <p style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0;">Select a week and press Load Report.</p>
+  </div>
+
+</div><!-- /screen-weekly-mi -->
+
+<!-- ═══════════════════════════════════════════
      SUCCESS
 ═══════════════════════════════════════════ -->
 <div id="success" style="display:none">
@@ -519,7 +546,7 @@ document.getElementById('r-week').value = mon.toISOString().split('T')[0];
 
 // ── Tab switching ─────────────────────────────────────────────────────────
 function switchTab(t) {
-  ['daily','plan','rota','history','drivers','mgmt','mi'].forEach(tab => {
+  ['daily','plan','rota','history','drivers','mgmt','mi','weekly-mi'].forEach(tab => {
     document.getElementById('screen-' + tab).className = 'screen' + (t===tab?' active':'');
     document.getElementById('tab-' + tab).className = 'tab-btn' + (t===tab?' active':'');
   });
@@ -528,6 +555,7 @@ function switchTab(t) {
   if (t === 'drivers') initDrivers();
   if (t === 'mgmt') initMgmt();
   if (t === 'mi') initMI();
+  if (t === 'weekly-mi') initWeeklyMI();
 }
 
 // ── History ───────────────────────────────────────────────────────────────
@@ -1642,6 +1670,217 @@ async function loadMI() {
       + '</div>';
 
     el.innerHTML = summaryHtml + html;
+
+  } catch(e) {
+    el.innerHTML = '<p style="color:#991b1b;font-size:13px;text-align:center;padding:32px 0;">Error: ' + e.message + '</p>';
+  }
+}
+
+// ── Weekly MI Tab ─────────────────────────────────────────────────────────
+function initWeeklyMI() {
+  const w = document.getElementById('wmi-week');
+  if (!w.value) {
+    // Default to Monday of current week
+    const now = new Date();
+    const day = now.getDay();
+    const diff = (day === 0 ? -6 : 1 - day);
+    const mon = new Date(now); mon.setDate(now.getDate() + diff);
+    w.value = mon.toISOString().split('T')[0];
+  }
+}
+
+function getWeekDates(weekStart) {
+  const dates = [];
+  const start = new Date(weekStart);
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start); d.setDate(start.getDate() + i);
+    dates.push(d.toISOString().split('T')[0]);
+  }
+  return dates;
+}
+
+async function loadWeeklyMI() {
+  const depot = document.getElementById('wmi-depot').value;
+  const weekStart = document.getElementById('wmi-week').value;
+  const el = document.getElementById('wmi-results');
+  if (!weekStart) { alert('Please select a week.'); return; }
+  el.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:24px 0;">Loading...</p>';
+
+  const dates = getWeekDates(weekStart);
+  const dayLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+  try {
+    // Load all shifts for the week
+    const weekEnd = dates[6];
+    let shiftQ = 'driver_shifts?shift_date=gte.' + weekStart + '&shift_date=lte.' + weekEnd + '&select=*&order=shift_date,driver_name';
+    if (depot) shiftQ += '&depot=eq.' + encodeURIComponent(depot);
+    const shifts = await sbFetch(shiftQ);
+
+    // Load all daily ops for the week
+    let opsQ = 'daily_ops?ops_date=gte.' + weekStart + '&ops_date=lte.' + weekEnd + '&select=*';
+    if (depot) opsQ += '&depot=eq.' + encodeURIComponent(depot);
+    const opsRows = await sbFetch(opsQ);
+
+    // Load weekly plan for planned start times
+    const planRows = await sbFetch('depot_weekly_plan?week_start=eq.' + weekStart + '&select=*' + (depot ? '&depot=eq.' + encodeURIComponent(depot) : ''));
+
+    // Build planned map: depot -> driver_name -> day -> start_time
+    const planMap = {};
+    const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    if (planRows) {
+      for (const plan of planRows) {
+        if (!planMap[plan.depot]) planMap[plan.depot] = {};
+        const drivers = Array.isArray(plan.drivers) ? plan.drivers : [];
+        for (const d of drivers) {
+          planMap[plan.depot][d.name] = d.start_time || null;
+        }
+      }
+    }
+
+    // Group ops by depot+date for bay flags
+    const opsMap = {};
+    if (opsRows) {
+      for (const o of opsRows) {
+        const key = o.depot + '|' + o.ops_date;
+        if (!opsMap[key]) opsMap[key] = o;
+      }
+    }
+
+    // Group shifts by depot
+    const depotMap = {};
+    if (shifts) {
+      for (const s of shifts) {
+        if (!depotMap[s.depot]) depotMap[s.depot] = [];
+        depotMap[s.depot].push(s);
+      }
+    }
+
+    if (!shifts || !shifts.length) {
+      el.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0;">No shift data found for this week.</p>';
+      return;
+    }
+
+    let html = '';
+
+    for (const [dep, depShifts] of Object.entries(depotMap)) {
+      // Compute weekly summary stats
+      let totalShifts = 0, totalNoShow = 0, totalOver90 = 0, totalLate = 0;
+      let totalMins = 0, minCount = 0;
+      const bayDays = [];
+
+      // Per-day per-driver data
+      const dayDriverMap = {};
+      for (const s of depShifts) {
+        if (!dayDriverMap[s.shift_date]) dayDriverMap[s.shift_date] = [];
+        dayDriverMap[s.shift_date].push(s);
+        totalShifts++;
+        const mins = minutesDiff(s.time_at_depot, s.depot_departure_time);
+        if (mins !== null) { totalMins += mins; minCount++; if (mins > 90) totalOver90++; }
+      }
+
+      // Check ops for no shows and bay delays
+      if (opsRows) {
+        for (const o of opsRows.filter(o => o.depot === dep)) {
+          if (o.bay_available === false) bayDays.push(o.ops_date.substring(5));
+          const drivers = Array.isArray(o.drivers) ? o.drivers : [];
+          totalNoShow += drivers.filter(d => d.status === 'absent').length;
+          totalLate += drivers.filter(d => d.status === 'late').length;
+        }
+      }
+
+      const avgMins = minCount > 0 ? Math.round(totalMins / minCount) : null;
+      const depPlan = planMap[dep] || {};
+
+      // Summary card
+      html += '<div style="margin-bottom:24px;">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">';
+      html += '<h3 style="font-size:15px;font-weight:700;color:var(--navy);margin:0;">' + dep + '</h3>';
+      if (bayDays.length) html += '<span style="background:#fee2e2;color:#991b1b;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;">Bay delays: ' + bayDays.join(', ') + '</span>';
+      html += '</div>';
+
+      // Summary stats row
+      html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">';
+      html += '<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 14px;text-align:center;min-width:70px;"><div style="font-size:18px;font-weight:700;color:var(--navy);">' + totalShifts + '</div><div style="font-size:10px;color:var(--muted);font-weight:600;">TOTAL SHIFTS</div></div>';
+      html += '<div style="background:#fee2e2;border-radius:8px;padding:8px 14px;text-align:center;min-width:70px;"><div style="font-size:18px;font-weight:700;color:#991b1b;">' + totalNoShow + '</div><div style="font-size:10px;color:#991b1b;font-weight:600;">NO SHOWS</div></div>';
+      html += '<div style="background:#fef3c7;border-radius:8px;padding:8px 14px;text-align:center;min-width:70px;"><div style="font-size:18px;font-weight:700;color:#92400e;">' + totalLate + '</div><div style="font-size:10px;color:#92400e;font-weight:600;">LATE</div></div>';
+      html += '<div style="background:#fee2e2;border-radius:8px;padding:8px 14px;text-align:center;min-width:70px;"><div style="font-size:18px;font-weight:700;color:#991b1b;">' + totalOver90 + '</div><div style="font-size:10px;color:#991b1b;font-weight:600;">&gt;90 MIN</div></div>';
+      html += '<div style="background:#d1fae5;border-radius:8px;padding:8px 14px;text-align:center;min-width:70px;"><div style="font-size:18px;font-weight:700;color:#065f46;">' + (avgMins !== null ? avgMins + 'm' : '—') + '</div><div style="font-size:10px;color:#065f46;font-weight:600;">AVG IN DEPOT</div></div>';
+      html += '</div>';
+
+      // Per-day breakdown table
+      html += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">';
+      html += '<thead><tr style="background:var(--navy);color:#fff;">';
+      html += '<th style="padding:7px 10px;text-align:left;white-space:nowrap;">Day</th>';
+      html += '<th style="padding:7px 10px;text-align:left;white-space:nowrap;">Driver</th>';
+      html += '<th style="padding:7px 10px;text-align:center;white-space:nowrap;">Planned</th>';
+      html += '<th style="padding:7px 10px;text-align:center;white-space:nowrap;">Arrived</th>';
+      html += '<th style="padding:7px 10px;text-align:center;white-space:nowrap;">Departed</th>';
+      html += '<th style="padding:7px 10px;text-align:center;white-space:nowrap;">In Depot</th>';
+      html += '<th style="padding:7px 10px;text-align:center;white-space:nowrap;">Status</th>';
+      html += '</tr></thead><tbody>';
+
+      let rowIdx = 0;
+      for (let di = 0; di < dates.length; di++) {
+        const date = dates[di];
+        const dayLabel = dayLabels[di];
+        const dayShifts = (dayDriverMap[date] || []).sort((a,b) => (a.driver_name||'').localeCompare(b.driver_name||''));
+        const opsKey = dep + '|' + date;
+        const opsDay = opsMap[opsKey];
+        const opsDrivers = opsDay && Array.isArray(opsDay.drivers) ? opsDay.drivers : [];
+
+        if (!dayShifts.length) {
+          // Check if there were any expected drivers from ops
+          if (opsDrivers.length) {
+            opsDrivers.filter(d => d.status === 'absent').forEach(d => {
+              const bg = rowIdx % 2 === 0 ? '#fff' : '#f9fafb';
+              html += '<tr style="background:' + bg + ';">';
+              html += '<td style="padding:7px 10px;color:var(--muted);font-weight:600;">' + dayLabel + '</td>';
+              html += '<td style="padding:7px 10px;color:var(--navy);font-weight:600;">' + d.name + '</td>';
+              html += '<td style="padding:7px 10px;text-align:center;color:var(--muted);">' + fmtTime(depPlan[d.name]) + '</td>';
+              html += '<td style="padding:7px 10px;text-align:center;">—</td>';
+              html += '<td style="padding:7px 10px;text-align:center;">—</td>';
+              html += '<td style="padding:7px 10px;text-align:center;">—</td>';
+              html += '<td style="padding:7px 10px;text-align:center;"><span style="background:#fee2e2;color:#991b1b;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;">NO SHOW</span></td>';
+              html += '</tr>';
+              rowIdx++;
+            });
+          }
+          continue;
+        }
+
+        dayShifts.forEach(s => {
+          const mins = minutesDiff(s.time_at_depot, s.depot_departure_time);
+          const over90 = mins !== null && mins > 90;
+          const bg = rowIdx % 2 === 0 ? '#fff' : '#f9fafb';
+          const opsDriver = opsDrivers.find(d => d.name === s.driver_name);
+          const isAbsent = opsDriver && opsDriver.status === 'absent';
+          const isLate = opsDriver && opsDriver.status === 'late';
+
+          let badge = '';
+          if (isAbsent) badge = '<span style="background:#fee2e2;color:#991b1b;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;">NO SHOW</span>';
+          else if (isLate) badge = '<span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;">LATE</span>';
+          else if (s.status === 'lead_confirmed') badge = '<span style="background:#d1fae5;color:#065f46;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;">CONFIRMED</span>';
+          else if (s.status === 'eod_complete') badge = '<span style="background:#dbeafe;color:#1e40af;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;">EOD DONE</span>';
+          else if (s.status === 'sod_complete') badge = '<span style="background:#f3f4f6;color:#374151;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;">SOD</span>';
+          else badge = '<span style="background:#f3f4f6;color:#6b7280;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;">—</span>';
+
+          html += '<tr style="background:' + bg + ';">';
+          html += '<td style="padding:7px 10px;color:var(--muted);font-weight:600;white-space:nowrap;">' + dayLabel + ' ' + date.substring(5) + '</td>';
+          html += '<td style="padding:7px 10px;color:var(--navy);font-weight:600;">' + (s.driver_name||'—') + '</td>';
+          html += '<td style="padding:7px 10px;text-align:center;color:var(--muted);">' + fmtTime(depPlan[s.driver_name]) + '</td>';
+          html += '<td style="padding:7px 10px;text-align:center;">' + fmtTime(s.time_at_depot) + '</td>';
+          html += '<td style="padding:7px 10px;text-align:center;">' + fmtTime(s.depot_departure_time) + '</td>';
+          html += '<td style="padding:7px 10px;text-align:center;"><span style="' + (over90 ? 'color:#991b1b;font-weight:700;' : 'color:var(--navy);') + '">' + (mins !== null ? mins + 'm' + (over90 ? ' ⚠' : '') : '—') + '</span></td>';
+          html += '<td style="padding:7px 10px;text-align:center;">' + badge + '</td>';
+          html += '</tr>';
+          rowIdx++;
+        });
+      }
+
+      html += '</tbody></table></div></div>';
+    }
+
+    el.innerHTML = html;
 
   } catch(e) {
     el.innerHTML = '<p style="color:#991b1b;font-size:13px;text-align:center;padding:32px 0;">Error: ' + e.message + '</p>';
