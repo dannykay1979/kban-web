@@ -190,6 +190,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   <button class="tab-btn" onclick="switchTab('history')" id="tab-history">History</button>
   <button class="tab-btn" onclick="switchTab('drivers')" id="tab-drivers">Drivers</button>
   <button class="tab-btn" onclick="switchTab('mgmt')" id="tab-mgmt">Mgmt</button>
+  <button class="tab-btn" onclick="switchTab('mi')" id="tab-mi">MI</button>
 </div>
 <div class="prog-track"><div class="prog-fill" id="prog"></div></div>
 
@@ -454,6 +455,30 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 </div><!-- /screen-mgmt -->
 
 <!-- ═══════════════════════════════════════════
+     MI TAB — DAILY MANAGEMENT INFORMATION
+═══════════════════════════════════════════ -->
+<div class="screen" id="screen-mi" style="padding:14px 14px 32px;">
+
+  <!-- Filters -->
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+    <select id="mi-depot" style="flex:1;min-width:130px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--navy);">
+      <option value="">All depots</option>
+      <option>DHL Middleton</option>
+      <option>DHL Runcorn</option>
+      <option>DPD Aberdeen</option>
+      <option>DPD Edinburgh</option>
+    </select>
+    <input type="date" id="mi-date" style="flex:1;min-width:130px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--navy);">
+    <button onclick="loadMI()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">Load Report</button>
+  </div>
+
+  <div id="mi-results">
+    <p style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0;">Select a depot and date then press Load Report.</p>
+  </div>
+
+</div><!-- /screen-mi -->
+
+<!-- ═══════════════════════════════════════════
      SUCCESS
 ═══════════════════════════════════════════ -->
 <div id="success" style="display:none">
@@ -494,7 +519,7 @@ document.getElementById('r-week').value = mon.toISOString().split('T')[0];
 
 // ── Tab switching ─────────────────────────────────────────────────────────
 function switchTab(t) {
-  ['daily','plan','rota','history','drivers','mgmt'].forEach(tab => {
+  ['daily','plan','rota','history','drivers','mgmt','mi'].forEach(tab => {
     document.getElementById('screen-' + tab).className = 'screen' + (t===tab?' active':'');
     document.getElementById('tab-' + tab).className = 'tab-btn' + (t===tab?' active':'');
   });
@@ -502,6 +527,7 @@ function switchTab(t) {
   if (t === 'history') initHistory();
   if (t === 'drivers') initDrivers();
   if (t === 'mgmt') initMgmt();
+  if (t === 'mi') initMI();
 }
 
 // ── History ───────────────────────────────────────────────────────────────
@@ -1451,6 +1477,176 @@ async function toggleDriver(id, currentlyActive) {
 }
 
 
+
+// ── MI Tab ────────────────────────────────────────────────────────────────
+function initMI() {
+  const d = document.getElementById('mi-date');
+  if (!d.value) d.value = new Date().toISOString().split('T')[0];
+}
+
+function fmtTime(t) {
+  if (!t) return '—';
+  return t.substring(0,5);
+}
+
+function minutesDiff(from, to) {
+  if (!from || !to) return null;
+  const [fh,fm] = from.split(':').map(Number);
+  const [th,tm] = to.split(':').map(Number);
+  return (th*60+tm) - (fh*60+fm);
+}
+
+async function loadMI() {
+  const depot = document.getElementById('mi-depot').value;
+  const date  = document.getElementById('mi-date').value;
+  const el    = document.getElementById('mi-results');
+  if (!date) { alert('Please select a date.'); return; }
+  el.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:24px 0;">Loading...</p>';
+
+  try {
+    // 1. Get weekly plan for depot (to get planned start times)
+    const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const dow = dayNames[new Date(date).getDay()];
+    let depotFilter = depot ? '&depot=eq.' + encodeURIComponent(depot) : '';
+    const planRows = await sbFetch('depot_weekly_plan?week_start=lte.' + date + '&order=week_start.desc&limit=4' + depotFilter);
+    
+    // Build planned start map: driver_name -> planned start time for this day
+    const plannedMap = {};
+    if (planRows && planRows.length) {
+      for (const plan of planRows) {
+        const drivers = Array.isArray(plan.drivers) ? plan.drivers : [];
+        for (const d of drivers) {
+          if (!plannedMap[d.name] && d.days && d.days[dow]) {
+            plannedMap[d.name] = d.start_time || d.days[dow] || null;
+          } else if (!plannedMap[d.name] && d.start_time) {
+            plannedMap[d.name] = d.start_time;
+          }
+        }
+      }
+    }
+
+    // 2. Get driver shifts for this date
+    let shiftFilter = 'driver_shifts?shift_date=eq.' + date + '&select=*';
+    if (depot) shiftFilter += '&depot=eq.' + encodeURIComponent(depot);
+    const shifts = await sbFetch(shiftFilter);
+
+    // 3. Get daily ops submission for context (bay, exceptions)
+    let opsFilter = 'daily_ops?ops_date=eq.' + date + '&select=*';
+    if (depot) opsFilter += '&depot=eq.' + encodeURIComponent(depot);
+    const opsRows = await sbFetch(opsFilter);
+
+    // Build ops driver map for exceptions
+    const opsDriverMap = {};
+    if (opsRows && opsRows.length) {
+      for (const ops of opsRows) {
+        const drivers = Array.isArray(ops.drivers) ? ops.drivers : [];
+        for (const d of drivers) {
+          if (!opsDriverMap[d.name]) opsDriverMap[d.name] = d;
+        }
+      }
+    }
+
+    // Group shifts by depot
+    const depots = {};
+    if (shifts && shifts.length) {
+      for (const s of shifts) {
+        if (!depots[s.depot]) depots[s.depot] = [];
+        depots[s.depot].push(s);
+      }
+    }
+
+    if (!shifts || !shifts.length) {
+      el.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0;">No driver shift data found for this date.' + (depot ? '' : ' Try selecting a specific depot.') + '</p>';
+      return;
+    }
+
+    // Summary stats
+    let totalDrivers = 0, totalNoShow = 0, totalOver90 = 0, totalOnTime = 0;
+
+    let html = '';
+    for (const [dep, dShifts] of Object.entries(depots)) {
+      const opsRow = opsRows ? opsRows.find(o => o.depot === dep) : null;
+      const bayFlag = opsRow && opsRow.bay_available === false;
+
+      html += '<div style="margin-bottom:20px;">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+      html += '<h3 style="font-size:14px;font-weight:700;color:var(--navy);margin:0;">' + dep + '</h3>';
+      if (bayFlag) html += '<span style="background:#fee2e2;color:#991b1b;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;">⚠ Bay delay</span>';
+      html += '</div>';
+
+      // Table
+      html += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">';
+      html += '<thead><tr style="background:var(--navy);color:#fff;">';
+      html += '<th style="padding:8px 10px;text-align:left;white-space:nowrap;">Driver</th>';
+      html += '<th style="padding:8px 10px;text-align:center;white-space:nowrap;">Planned Start</th>';
+      html += '<th style="padding:8px 10px;text-align:center;white-space:nowrap;">Actual Arrival</th>';
+      html += '<th style="padding:8px 10px;text-align:center;white-space:nowrap;">Departure</th>';
+      html += '<th style="padding:8px 10px;text-align:center;white-space:nowrap;">Time in Depot</th>';
+      html += '<th style="padding:8px 10px;text-align:center;white-space:nowrap;">Status</th>';
+      html += '<th style="padding:8px 10px;text-align:left;white-space:nowrap;">Notes</th>';
+      html += '</tr></thead><tbody>';
+
+      dShifts.sort((a,b) => (a.driver_name||'').localeCompare(b.driver_name||''));
+
+      dShifts.forEach((s, idx) => {
+        totalDrivers++;
+        const plannedStart = plannedMap[s.driver_name] || null;
+        const actualArrival = s.time_at_depot;
+        const departure = s.depot_departure_time;
+        const mins = minutesDiff(actualArrival, departure);
+        const over90 = mins !== null && mins > 90;
+        if (over90) totalOver90++;
+
+        const opsDriver = opsDriverMap[s.driver_name];
+        const driverStatus = opsDriver ? opsDriver.status : s.status;
+        const isAbsent = driverStatus === 'absent';
+        if (isAbsent) totalNoShow++;
+        if (!isAbsent && !over90) totalOnTime++;
+
+        const rowBg = idx % 2 === 0 ? '#fff' : '#f9fafb';
+        const depFlagStyle = over90 ? 'background:#fee2e2;color:#991b1b;padding:2px 7px;border-radius:4px;font-weight:700;' : 'color:var(--navy);';
+
+        let statusBadge = '';
+        if (isAbsent) statusBadge = '<span style="background:#fee2e2;color:#991b1b;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;">NO SHOW</span>';
+        else if (driverStatus === 'late') statusBadge = '<span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;">LATE</span>';
+        else if (s.status === 'lead_confirmed') statusBadge = '<span style="background:#d1fae5;color:#065f46;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;">CONFIRMED</span>';
+        else if (s.status === 'eod_complete') statusBadge = '<span style="background:#dbeafe;color:#1e40af;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;">EOD DONE</span>';
+        else if (s.status === 'sod_complete') statusBadge = '<span style="background:#f3f4f6;color:#374151;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;">ON ROUTE</span>';
+        else statusBadge = '<span style="background:#f3f4f6;color:#6b7280;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;">PENDING</span>';
+
+        const notes = [
+          opsDriver && opsDriver.notes ? opsDriver.notes : '',
+          s.lead_notes || '',
+        ].filter(Boolean).join(' · ');
+
+        html += '<tr style="background:' + rowBg + ';">';
+        html += '<td style="padding:8px 10px;color:var(--navy);font-weight:600;">' + (s.driver_name||'—') + '</td>';
+        html += '<td style="padding:8px 10px;text-align:center;color:var(--muted);">' + fmtTime(plannedStart) + '</td>';
+        html += '<td style="padding:8px 10px;text-align:center;">' + fmtTime(actualArrival) + '</td>';
+        html += '<td style="padding:8px 10px;text-align:center;">' + fmtTime(departure) + '</td>';
+        html += '<td style="padding:8px 10px;text-align:center;"><span style="' + depFlagStyle + '">' + (mins !== null ? mins + ' min' + (over90 ? ' ⚠' : '') : '—') + '</span></td>';
+        html += '<td style="padding:8px 10px;text-align:center;">' + statusBadge + '</td>';
+        html += '<td style="padding:8px 10px;color:var(--muted);font-size:11px;">' + (notes||'') + '</td>';
+        html += '</tr>';
+      });
+
+      html += '</tbody></table></div></div>';
+    }
+
+    // Summary bar
+    const summaryHtml = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">'
+      + '<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 16px;text-align:center;min-width:80px;"><div style="font-size:20px;font-weight:700;color:var(--navy);">' + totalDrivers + '</div><div style="font-size:11px;color:var(--muted);font-weight:600;">TOTAL</div></div>'
+      + '<div style="background:#fee2e2;border-radius:8px;padding:10px 16px;text-align:center;min-width:80px;"><div style="font-size:20px;font-weight:700;color:#991b1b;">' + totalNoShow + '</div><div style="font-size:11px;color:#991b1b;font-weight:600;">NO SHOW</div></div>'
+      + '<div style="background:#fef3c7;border-radius:8px;padding:10px 16px;text-align:center;min-width:80px;"><div style="font-size:20px;font-weight:700;color:#92400e;">' + totalOver90 + '</div><div style="font-size:11px;color:#92400e;font-weight:600;">&gt;90 MIN</div></div>'
+      + '<div style="background:#d1fae5;border-radius:8px;padding:10px 16px;text-align:center;min-width:80px;"><div style="font-size:20px;font-weight:700;color:#065f46;">' + totalOnTime + '</div><div style="font-size:11px;color:#065f46;font-weight:600;">ON TIME</div></div>'
+      + '</div>';
+
+    el.innerHTML = summaryHtml + html;
+
+  } catch(e) {
+    el.innerHTML = '<p style="color:#991b1b;font-size:13px;text-align:center;padding:32px 0;">Error: ' + e.message + '</p>';
+  }
+}
 
 </script>
 </body>
