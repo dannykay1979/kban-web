@@ -505,6 +505,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       <input type="date" id="wmi-week" style="flex:1;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--navy);">
     </div>
     <button onclick="loadWeeklyMI()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">Load Report</button>
+    <button onclick="exportWeeklyCSV()" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">Export CSV</button>
   </div>
 
   <div id="wmi-results">
@@ -1938,6 +1939,143 @@ async function saveDriverCard(driverId, depot) {
     await sbFetchAuth('driver_pins?id=eq.'+driverId,{method:'PATCH',prefer:'return=minimal',body:JSON.stringify({fuel_card:fuelCard,card_last4:cardLast4,driver_type:driverType})});
     loadDriverList();
   } catch(e) { alert('Save failed: '+e.message); }
+}
+
+// ── Weekly Payroll Export ──────────────────────────────────────────────────
+function deriveIdType(idValue) {
+  if (!idValue) return '';
+  const v = idValue.trim().toUpperCase();
+  if (v.startsWith('FD')) return 'FD';
+  if (v.startsWith('DR')) return 'DR';
+  if (v.includes('TEMP')) return 'DHL Temp';
+  if (/^\d+$/.test(v)) return 'DHL Permanent';
+  return '';
+}
+
+function csvEscape(val) {
+  if (val === null || val === undefined) return '';
+  const s = String(val);
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function downloadCSV(filename, rows) {
+  const content = rows.map(r => r.map(csvEscape).join(',')).join('\n');
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.style.display = 'none';
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+}
+
+async function exportWeeklyCSV() {
+  const depot    = document.getElementById('wmi-depot').value;
+  const weekStart = document.getElementById('wmi-week').value;
+  if (!weekStart) { alert('Please select a week first.'); return; }
+
+  // Week date range
+  const dates = [];
+  const start = new Date(weekStart);
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start); d.setDate(start.getDate() + i);
+    dates.push(d.toISOString().split('T')[0]);
+  }
+  const weekEnd = dates[6];
+
+  try {
+    // Load daily ops for the week
+    let opsQ = 'daily_ops?ops_date=gte.'+weekStart+'&ops_date=lte.'+weekEnd+'&select=*';
+    if (depot) opsQ += '&depot=eq.'+encodeURIComponent(depot);
+    const opsRows = await sbFetch(opsQ);
+
+    // Load driver shifts for the week
+    let shiftQ = 'driver_shifts?shift_date=gte.'+weekStart+'&shift_date=lte.'+weekEnd+'&select=*';
+    if (depot) shiftQ += '&depot=eq.'+encodeURIComponent(depot);
+    const shifts = await sbFetch(shiftQ);
+
+    // Build shift map: depot+date+driver_name -> shift
+    const shiftMap = {};
+    (shifts||[]).forEach(s => { shiftMap[s.depot+'|'+s.shift_date+'|'+s.driver_name] = s; });
+
+    // Build daily rows from ops submissions
+    const dailyRows = [['Date','Site','Driver','ID Type','ID Value','Route','Day Type','Notes']];
+    const DAY_TYPE_LABELS = {
+      standard:      'Standard Route',
+      dpd_classroom: 'DPD Classroom',
+      dpd_ridealong: 'DPD Ride-Along',
+      dhl_ridealong: 'DHL Ride-Along',
+    };
+
+    (opsRows||[]).forEach(ops => {
+      const drivers = Array.isArray(ops.drivers) ? ops.drivers : [];
+      drivers.forEach(dr => {
+        if (dr.status === 'absent') return; // skip no-shows
+        const shiftKey = ops.depot+'|'+ops.ops_date+'|'+dr.name;
+        const shift = shiftMap[shiftKey];
+        const idValue = dr.day_id || dr.planned_id || '';
+        const dayTypeRaw = shift ? (shift.day_type||'standard') : 'standard';
+        const dayTypeLabel = DAY_TYPE_LABELS[dayTypeRaw] || dayTypeRaw;
+        const notes = dr.notes || '';
+        dailyRows.push([
+          ops.ops_date,
+          ops.depot,
+          dr.name,
+          deriveIdType(idValue),
+          idValue,
+          '', // Route — comes from DPD portal extract
+          dayTypeLabel,
+          notes,
+        ]);
+      });
+    });
+
+    // Format week string for filename
+    const weekLabel = weekStart.replace(/-/g,'');
+    const depotLabel = depot ? '_'+depot.replace(/\s+/g,'') : '';
+    downloadCSV('KBAN_Daily_'+weekLabel+depotLabel+'.csv', dailyRows);
+
+    // Small delay then download drivers reference
+    setTimeout(async () => {
+      try {
+        let drQ = 'driver_pins?active=eq.true&select=driver_name,depot,fuel_card,driver_type&order=depot,driver_name';
+        if (depot) drQ += '&depot=eq.'+encodeURIComponent(depot);
+        const drivers = await sbFetch(drQ);
+        const DRIVER_TYPE_MAP = {
+          se_kban_hire:  'KBAN-hire self-employed',
+          flat_rate:     'Flat-rate',
+          paye:          'PAYE',
+          owner_driver:  'Owner-driver',
+          leaver:        'Leaver',
+        };
+        const driverRows = [['Driver','Also Known As','Home Site','Driver Type','Pay Model','Van Hire Applies','Fuel Card','Fuel Treatment','Lead','Status']];
+        // Deduplicate by driver_name (some have dual depot entries)
+        const seen = new Set();
+        (drivers||[]).forEach(d => {
+          if (seen.has(d.driver_name)) return;
+          seen.add(d.driver_name);
+          driverRows.push([
+            d.driver_name,
+            '', // Also known as — fill in master reference
+            d.depot,
+            DRIVER_TYPE_MAP[d.driver_type] || d.driver_type || '',
+            '', // Pay model — fill in master reference
+            '', // Van hire — fill in master reference
+            d.fuel_card || '',
+            '', // Fuel treatment — fill in master reference
+            '', // Lead allowance — fill in master reference
+            'Active',
+          ]);
+        });
+        downloadCSV('KBAN_Drivers_Reference.csv', driverRows);
+      } catch(e) { console.error('Drivers export error:', e); }
+    }, 800);
+
+    alert('Exporting 2 files:\n1. KBAN_Daily_'+weekLabel+depotLabel+'.csv\n2. KBAN_Drivers_Reference.csv');
+
+  } catch(e) {
+    alert('Export failed: ' + e.message);
+  }
 }
 
 </script>
