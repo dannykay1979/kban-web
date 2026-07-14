@@ -437,6 +437,14 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
           <input type="password" id="mg-pin2" placeholder="••••" maxlength="4" inputmode="numeric" pattern="[0-9]{4}">
         </div>
       </div>
+      <div class="r2" style="margin-bottom:10px;">
+        <div class="f"><label>Fuel Card (KBAN No.)</label><input type="text" id="mg-fuel-card" placeholder="e.g. KBAN 19" autocomplete="off" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()"></div>
+        <div class="f"><label>Card Last 4 Digits</label><input type="text" id="mg-card-last4" placeholder="e.g. 0475" maxlength="4" inputmode="numeric"></div>
+      </div>
+      <div class="f" style="margin-bottom:10px;">
+        <label>Driver Type</label>
+        <select id="mg-driver-type"><option value="">Select type...</option><option value="se_kban_hire">KBAN-hire self-employed</option><option value="flat_rate">Flat-rate</option><option value="paye">PAYE</option><option value="owner_driver">Owner-driver</option><option value="leaver">Leaver</option></select>
+      </div>
       <div id="mg-err" style="display:none;background:var(--rbg);border:1px solid #fca5a5;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--red);margin-bottom:10px;"></div>
       <button class="sbtn" onclick="addDriver()" id="mg-submit-btn">Add Driver</button>
     </div>
@@ -1439,8 +1447,9 @@ async function loadDriverList() {
         html += `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid #f0f0f0;">
           <div style="flex:1;min-width:0;">
             <div style="font-weight:700;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.driver_name}</div>
-            <div style="font-size:12px;color:var(--muted);margin-top:1px;">${d.driver_id}${d.email ? ' · ' + d.email : ''}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:1px;">${d.driver_id}${d.email?' | '+d.email:''}${d.fuel_card?' | Card: '+d.fuel_card+(d.card_last4?' ('+d.card_last4+')':''):''}${d.driver_type?' | '+driverTypeLabel(d.driver_type):''}</div>
           </div>
+          <button onclick="editDriverCard('${d.id}','${d.depot}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:12px;cursor:pointer;color:var(--blue);">Edit</button>
           <span class="badge ${active?'badge-ok':'badge-err'}" style="flex-shrink:0;">${active?'Active':'Inactive'}</span>
           <button onclick="toggleDriver('${d.id}', ${active})" style="background:none;border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:12px;cursor:pointer;color:${active?'var(--red)':'var(--green)'};">${active?'Deactivate':'Activate'}</button>
         </div>`;
@@ -1453,44 +1462,44 @@ async function loadDriverList() {
 }
 
 async function addDriver() {
-  const id     = document.getElementById('mg-id').value.trim().toUpperCase();
-  const name   = document.getElementById('mg-name').value.trim();
-  const email  = document.getElementById('mg-email').value.trim();
-  const depot  = document.getElementById('mg-depot').value;
-  const pin    = document.getElementById('mg-pin').value;
-  const pin2   = document.getElementById('mg-pin2').value;
-  const errEl  = document.getElementById('mg-err');
-  const btn    = document.getElementById('mg-submit-btn');
-
+  const id         = document.getElementById('mg-id').value.trim().toUpperCase();
+  const name       = document.getElementById('mg-name').value.trim();
+  const email      = document.getElementById('mg-email').value.trim();
+  const depot      = document.getElementById('mg-depot').value;
+  const pin        = document.getElementById('mg-pin').value;
+  const pin2       = document.getElementById('mg-pin2').value;
+  const fuelCard   = (document.getElementById('mg-fuel-card')?.value||'').trim().toUpperCase()||null;
+  const cardLast4  = (document.getElementById('mg-card-last4')?.value||'').trim()||null;
+  const driverType = document.getElementById('mg-driver-type')?.value||null;
+  const errEl      = document.getElementById('mg-err');
+  const btn        = document.getElementById('mg-submit-btn');
   const show = msg => { errEl.textContent = msg; errEl.style.display = 'block'; };
   errEl.style.display = 'none';
-
-  if (!id)              return show('Driver ID is required.');
-  if (!name)            return show('Full name is required.');
-  if (!depot)           return show('Please select a depot.');
+  if (!id)                   return show('Driver ID is required.');
+  if (!name)                 return show('Full name is required.');
+  if (!depot)                return show('Please select a depot.');
   if (!/^\d{4}$/.test(pin)) return show('PIN must be exactly 4 digits.');
-  if (pin !== pin2)     return show('PINs do not match.');
-
-  btn.disabled = true; btn.textContent = 'Saving…';
+  if (pin !== pin2)          return show('PINs do not match.');
+  if (fuelCard && fuelCard !== 'NONE / COMPANY CARD') {
+    try {
+      const ex = await sbFetchAuth('driver_pins?depot=eq.'+encodeURIComponent(depot)+'&fuel_card=eq.'+encodeURIComponent(fuelCard)+'&active=eq.true&select=driver_name');
+      if (ex&&ex.length) return show(fuelCard+' is already assigned to '+ex[0].driver_name+' at '+depot+'. Reassign that card first.');
+    } catch(e) {}
+  }
+  btn.disabled = true; btn.textContent = 'Saving...';
   try {
     const pin_hash = await sha256(pin);
     const client = depot.startsWith('DHL') ? 'DHL' : 'DPD';
-    await sbFetchAuth('driver_pins', {
-      method: 'POST',
-      prefer: 'return=minimal',
-      body: JSON.stringify({ driver_id: id, driver_name: name, depot, client, pin_hash, email: email||null, active: true })
+    await sbFetchAuth('driver_pins', { method:'POST', prefer:'return=minimal',
+      body: JSON.stringify({driver_id:id,driver_name:name,depot,client,pin_hash,email:email||null,active:true,fuel_card:fuelCard,card_last4:cardLast4,driver_type:driverType})
     });
-    // clear form
-    ['mg-id','mg-name','mg-email','mg-pin','mg-pin2'].forEach(f => document.getElementById(f).value = '');
-    document.getElementById('mg-depot').value = '';
+    ['mg-id','mg-name','mg-email','mg-pin','mg-pin2','mg-fuel-card','mg-card-last4'].forEach(f=>{const el=document.getElementById(f);if(el)el.value='';});
+    document.getElementById('mg-depot').value='';
+    const dt=document.getElementById('mg-driver-type');if(dt)dt.value='';
     loadDriverList();
   } catch(e) {
-    show(e.message.includes('duplicate')
-      ? `${id} already exists for ${depot}. Deactivate the existing record first.`
-      : e.message);
-  } finally {
-    btn.disabled = false; btn.textContent = 'Add Driver';
-  }
+    show(e.message.includes('duplicate')?id+' already exists for '+depot+'. Deactivate the existing record first.':e.message);
+  } finally { btn.disabled=false; btn.textContent='Add Driver'; }
 }
 
 async function toggleDriver(id, currentlyActive) {
@@ -1885,6 +1894,50 @@ async function loadWeeklyMI() {
   } catch(e) {
     el.innerHTML = '<p style="color:#991b1b;font-size:13px;text-align:center;padding:32px 0;">Error: ' + e.message + '</p>';
   }
+}
+
+// -- Edit driver card --
+function driverTypeLabel(t){return {se_kban_hire:"KBAN-hire SE",flat_rate:"Flat-rate",paye:"PAYE",owner_driver:"Owner-driver",leaver:"Leaver"}[t]||t;}
+const DRIVER_TYPE_LABELS = {se_kban_hire:'KBAN-hire SE',flat_rate:'Flat-rate',paye:'PAYE',owner_driver:'Owner-driver',leaver:'Leaver'};
+
+async function editDriverCard(driverId, depot) {
+  const ex = document.getElementById('ec-'+driverId);
+  if (ex) { ex.remove(); return; }
+  const rows = await sbFetchAuth('driver_pins?id=eq.'+driverId+'&select=*');
+  if (!rows||!rows.length) return;
+  const d = rows[0];
+  const typeOpts = Object.entries(DRIVER_TYPE_LABELS).map(([k,v])=>'<option value="'+k+'"'+(d.driver_type===k?' selected':'')+'>'+v+'</option>').join('');
+  const html = '<div id="ec-'+driverId+'" style="background:#EBF3FE;border:1px solid var(--blue);border-radius:10px;padding:14px;margin:4px 14px;">'
+    +'<div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:10px;">Edit: '+d.driver_name+'</div>'
+    +'<div class="r2" style="margin-bottom:8px;">'
+    +'<div class="f"><label style="font-size:11px;">Fuel Card (KBAN No.)</label><input type="text" id="ec-fuel-'+driverId+'" value="'+(d.fuel_card||'')+'" placeholder="e.g. KBAN 19" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()"></div>'
+    +'<div class="f"><label style="font-size:11px;">Card Last 4</label><input type="text" id="ec-last4-'+driverId+'" value="'+(d.card_last4||'')+'" placeholder="0475" maxlength="4" inputmode="numeric" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;"></div>'
+    +'</div>'
+    +'<div class="f" style="margin-bottom:10px;"><label style="font-size:11px;">Driver Type</label>'
+    +'<select id="ec-type-'+driverId+'" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;"><option value="">Select...</option>'+typeOpts+'</select></div>'
+    +'<div style="display:flex;gap:8px;">'
+    +'<button onclick="saveDriverCard(\'' + driverId + '\',\'' + depot + '\')" style="flex:1;background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px;font-size:13px;font-weight:600;cursor:pointer;">Save</button>'
+    +'<button data-ecid="ec-'+driverId+'" onclick="var el=document.getElementById(this.dataset.ecid);if(el)el.remove();" style="flex:1;background:none;border:1px solid var(--border);border-radius:8px;padding:9px;font-size:13px;cursor:pointer;">Cancel</button>'
+    +'</div></div>';
+  const editBtn = document.querySelector('[onclick*="editDriverCard(\''+driverId+'\'"]');
+  if (editBtn) { const row=editBtn.closest('div[style*="display:flex"]'); if(row){row.insertAdjacentHTML('afterend',html);return;} }
+  document.getElementById('mg-list').insertAdjacentHTML('beforeend',html);
+}
+
+async function saveDriverCard(driverId, depot) {
+  const fuelCard  = (document.getElementById('ec-fuel-'+driverId)?.value||'').trim().toUpperCase()||null;
+  const cardLast4 = (document.getElementById('ec-last4-'+driverId)?.value||'').trim()||null;
+  const driverType = document.getElementById('ec-type-'+driverId)?.value||null;
+  if (fuelCard && fuelCard !== 'NONE / COMPANY CARD') {
+    try {
+      const ex = await sbFetchAuth('driver_pins?depot=eq.'+encodeURIComponent(depot)+'&fuel_card=eq.'+encodeURIComponent(fuelCard)+'&active=eq.true&id=neq.'+driverId+'&select=driver_name');
+      if (ex&&ex.length) { alert(fuelCard+' is already assigned to '+ex[0].driver_name+' at '+depot+'. Reassign that card first.'); return; }
+    } catch(e) {}
+  }
+  try {
+    await sbFetchAuth('driver_pins?id=eq.'+driverId,{method:'PATCH',prefer:'return=minimal',body:JSON.stringify({fuel_card:fuelCard,card_last4:cardLast4,driver_type:driverType})});
+    loadDriverList();
+  } catch(e) { alert('Save failed: '+e.message); }
 }
 
 </script>
