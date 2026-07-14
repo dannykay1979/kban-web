@@ -234,10 +234,6 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
           <label>Delivery Drops <span class="r">*</span></label>
           <input type="number" id="sod-delivery-drops" placeholder="e.g. 77" inputmode="numeric">
         </div>
-        <div class="f">
-          <label>Parcel Count <span class="r">*</span></label>
-          <input type="number" id="sod-parcel-count" placeholder="e.g. 100" inputmode="numeric">
-        </div>
       </div>
       <div class="f" id="sod-collections-wrap">
         <label>Collection Stops <span class="optional-badge">(DHL only)</span></label>
@@ -602,7 +598,6 @@ async function submitSOD() {
     const postcodes     = document.getElementById('sod-postcodes').value.trim();
     const startMileage  = document.getElementById('sod-start-mileage').value;
     const deliveryDrops = document.getElementById('sod-delivery-drops').value;
-    const parcelCount   = document.getElementById('sod-parcel-count').value;
 
     if (!routeId)       return showErr('Please enter your route/temp ID for today.');
     if (!timeAtDepot)   return showErr('Please enter your time at depot.');
@@ -610,7 +605,6 @@ async function submitSOD() {
     if (!postcodes)     return showErr('Please enter your postcodes or route area.');
     if (!startMileage)  return showErr('Please enter your start mileage.');
     if (!deliveryDrops) return showErr('Please enter your delivery drops.');
-    if (!parcelCount)   return showErr('Please enter your parcel count.');
   }
 
   const btn = document.getElementById('sod-btn');
@@ -638,7 +632,6 @@ async function submitSOD() {
       payload.postcodes                 = document.getElementById('sod-postcodes').value.trim() || null;
       payload.start_mileage             = parseInt(document.getElementById('sod-start-mileage').value) || null;
       payload.delivery_drops_planned    = parseInt(document.getElementById('sod-delivery-drops').value) || null;
-      payload.parcel_count              = parseInt(document.getElementById('sod-parcel-count').value) || null;
       payload.collection_stops_planned  = parseInt(document.getElementById('sod-collection-stops').value) || null;
     }
 
@@ -670,7 +663,6 @@ function renderWaitingScreen() {
     if (s.reported_id)            html += `<strong>Today's Route/Temp ID</strong>${s.reported_id}`;
     if (s.time_at_depot)          html += `<strong>Arrived at Depot</strong>${s.time_at_depot}`;
     if (s.delivery_drops_planned) html += `<strong>Delivery Drops Declared</strong>${s.delivery_drops_planned}`;
-    if (s.parcel_count)           html += `<strong>Parcel Count</strong>${s.parcel_count}`;
     if (isDHL && s.collection_stops_planned) html += `<strong>Collection Stops</strong>${s.collection_stops_planned}`;
     if (s.postcodes)              html += `<strong>Route Area</strong>${s.postcodes}`;
     if (s.start_mileage)          html += `<strong>Start Mileage</strong>${s.start_mileage}`;
