@@ -1914,7 +1914,7 @@ async function editDriverCard(driverId, depot) {
     +'<div class="f"><label style="font-size:11px;">Fuel Card (KBAN No.)</label><input type="text" id="ec-fuel-'+driverId+'" value="'+(d.fuel_card||'')+'" placeholder="e.g. KBAN 19" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()"></div>'
     +'<div class="f"><label style="font-size:11px;">Card Last 4</label><input type="text" id="ec-last4-'+driverId+'" value="'+(d.card_last4||'')+'" placeholder="0475" maxlength="4" inputmode="numeric" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;"></div>'
     +'</div>'
-    +'<div class="f" style="margin-bottom:10px;"><label style="font-size:11px;">Driver Type</label>'
+    +'<div class="r2" style="margin-bottom:8px;">'    +'<div class="f"><label style="font-size:11px;">New PIN (leave blank to keep)</label><input type="password" id="ec-pin-'+driverId+'" placeholder="4 digits" maxlength="4" inputmode="numeric" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;"></div>'    +'<div class="f"><label style="font-size:11px;">Confirm New PIN</label><input type="password" id="ec-pin2-'+driverId+'" placeholder="4 digits" maxlength="4" inputmode="numeric" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;"></div>'    +'</div>'    +'<div class="f" style="margin-bottom:10px;"><label style="font-size:11px;">Driver Type</label>'
     +'<select id="ec-type-'+driverId+'" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;"><option value="">Select...</option>'+typeOpts+'</select></div>'
     +'<div style="display:flex;gap:8px;">'
     +'<button onclick="saveDriverCard(\'' + driverId + '\',\'' + depot + '\')" style="flex:1;background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px;font-size:13px;font-weight:600;cursor:pointer;">Save</button>'
@@ -1926,17 +1926,28 @@ async function editDriverCard(driverId, depot) {
 }
 
 async function saveDriverCard(driverId, depot) {
-  const fuelCard  = (document.getElementById('ec-fuel-'+driverId)?.value||'').trim().toUpperCase()||null;
-  const cardLast4 = (document.getElementById('ec-last4-'+driverId)?.value||'').trim()||null;
+  const fuelCard   = (document.getElementById('ec-fuel-'+driverId)?.value||'').trim().toUpperCase()||null;
+  const cardLast4  = (document.getElementById('ec-last4-'+driverId)?.value||'').trim()||null;
   const driverType = document.getElementById('ec-type-'+driverId)?.value||null;
+  const newPin     = (document.getElementById('ec-pin-'+driverId)?.value||'').trim();
+  const newPin2    = (document.getElementById('ec-pin2-'+driverId)?.value||'').trim();
+
   if (fuelCard && fuelCard !== 'NONE / COMPANY CARD') {
     try {
       const ex = await sbFetchAuth('driver_pins?depot=eq.'+encodeURIComponent(depot)+'&fuel_card=eq.'+encodeURIComponent(fuelCard)+'&active=eq.true&id=neq.'+driverId+'&select=driver_name');
       if (ex&&ex.length) { alert(fuelCard+' is already assigned to '+ex[0].driver_name+' at '+depot+'. Reassign that card first.'); return; }
     } catch(e) {}
   }
+
+  if (newPin) {
+    if (!/^\d{4}$/.test(newPin)) { alert('PIN must be exactly 4 digits.'); return; }
+    if (newPin !== newPin2) { alert('PINs do not match.'); return; }
+  }
+
   try {
-    await sbFetchAuth('driver_pins?id=eq.'+driverId,{method:'PATCH',prefer:'return=minimal',body:JSON.stringify({fuel_card:fuelCard,card_last4:cardLast4,driver_type:driverType})});
+    const payload = { fuel_card: fuelCard, card_last4: cardLast4, driver_type: driverType };
+    if (newPin) payload.pin_hash = await sha256(newPin);
+    await sbFetchAuth('driver_pins?id=eq.'+driverId, { method:'PATCH', prefer:'return=minimal', body:JSON.stringify(payload) });
     loadDriverList();
   } catch(e) { alert('Save failed: '+e.message); }
 }
