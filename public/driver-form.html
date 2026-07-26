@@ -521,7 +521,7 @@ async function attemptLogin() {
     const hash = await sha256(pin);
 
     const rows = await sbFetch(
-      `driver_pins?driver_name=eq.${encodeURIComponent(driverName)}&depot=eq.${encodeURIComponent(depot)}&pin_hash=eq.${encodeURIComponent(hash)}&active=eq.true&select=*`
+      `driver_pins?driver_name=eq.${encodeURIComponent(driverName)}&depot=eq.${encodeURIComponent(depot)}&pin_hash=eq.${encodeURIComponent(hash)}&active=eq.true&select=id,driver_id,driver_name,depot,client`
     );
 
     if (!rows || rows.length === 0) {
