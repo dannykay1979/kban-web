@@ -1554,10 +1554,13 @@ async function loadMI() {
       for (const plan of planRows) {
         const drivers = Array.isArray(plan.drivers) ? plan.drivers : [];
         for (const d of drivers) {
-          if (!plannedMap[d.name] && d.days && d.days[dow]) {
-            plannedMap[d.name] = d.start_time || d.days[dow] || null;
-          } else if (!plannedMap[d.name] && d.start_time) {
-            plannedMap[d.name] = d.start_time;
+          if (!plannedMap[d.name]) {
+            // Support both old format (start_time/days) and new format (planned_arrival/operating_days)
+            const startsToday = (d.operating_days && Array.isArray(d.operating_days) && d.operating_days.includes(dow))
+                             || (d.days && d.days[dow]);
+            if (startsToday || d.planned_arrival || d.start_time) {
+              plannedMap[d.name] = d.planned_arrival || d.start_time || null;
+            }
           }
         }
       }
@@ -1742,7 +1745,7 @@ async function loadWeeklyMI() {
         if (!planMap[plan.depot]) planMap[plan.depot] = {};
         const drivers = Array.isArray(plan.drivers) ? plan.drivers : [];
         for (const d of drivers) {
-          planMap[plan.depot][d.name] = d.start_time || null;
+          planMap[plan.depot][d.name] = d.planned_arrival || d.start_time || null;
         }
       }
     }
