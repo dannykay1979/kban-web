@@ -304,7 +304,17 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 <input type="number" id="sod-parcel-count" placeholder="e.g. 112" inputmode="numeric">
 </div>
 </div>
-      <div class="f" id="sod-collections-wrap">
+      <div class="r2">
+<div class="f">
+<label>Pre-10 Drops <span class="optional-badge">(if any)</span></label>
+<input type="number" id="sod-pre10" placeholder="0" inputmode="numeric">
+</div>
+<div class="f">
+<label>Pre-12 Drops <span class="optional-badge">(if any)</span></label>
+<input type="number" id="sod-pre12" placeholder="0" inputmode="numeric">
+</div>
+</div>
+<div class="f" id="sod-collections-wrap">
         <label>Collection Stops <span class="optional-badge">(DHL only)</span></label>
         <input type="number" id="sod-collection-stops" placeholder="e.g. 13" inputmode="numeric">
       </div>
@@ -400,7 +410,33 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     </div>
   </div>
 
-  <!-- Collections (DHL only) -->
+  <!-- Premium Deliveries -->
+<div class="card">
+<div class="ch"><h2>Premium Deliveries</h2></div>
+<div class="cb">
+<p class="hint" style="margin-bottom:12px">Of your failed drops above, how many were timed pre-10 or pre-12 deliveries? Enter 0 if none.</p>
+<div class="r2">
+<div class="f">
+<label>Failed Pre-10 Drops</label>
+<input type="number" id="eod-failed-pre10" placeholder="0" inputmode="numeric" oninput="togglePremiumReason('pre10')">
+</div>
+<div class="f">
+<label>Failed Pre-12 Drops</label>
+<input type="number" id="eod-failed-pre12" placeholder="0" inputmode="numeric" oninput="togglePremiumReason('pre12')">
+</div>
+</div>
+<div class="f" id="eod-pre10-reason-wrap" style="display:none">
+<label>Reason for failed pre-10 <span class="r">*</span></label>
+<select id="eod-pre10-reason"><option value="">Select reason...</option><option>Customer Unavailable</option><option>Address Query</option><option>Missing / Lost</option><option>Rejected by Customer</option><option>CFWD / Out of Time</option><option>Business Closed</option><option>Access Restricted</option></select>
+</div>
+<div class="f" id="eod-pre12-reason-wrap" style="display:none">
+<label>Reason for failed pre-12 <span class="r">*</span></label>
+<select id="eod-pre12-reason"><option value="">Select reason...</option><option>Customer Unavailable</option><option>Address Query</option><option>Missing / Lost</option><option>Rejected by Customer</option><option>CFWD / Out of Time</option><option>Business Closed</option><option>Access Restricted</option></select>
+</div>
+</div>
+</div>
+
+<!-- Collections (DHL only) -->
   <div class="card" id="eod-collections-card">
     <div class="ch"><h2>Collections</h2></div>
     <div class="cb">
@@ -421,7 +457,16 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
         </div>
         <div class="f"></div>
       </div>
-      <div id="eod-col-reason-wrap" style="display:none">
+      <div class="f">
+<label>Collected On Time <span class="r">*</span></label>
+<input type="number" id="eod-col-ontime" placeholder="0" inputmode="numeric">
+<div class="hint" id="eod-col-late-hint">Of your successful stops, how many were collected within the collection window.</div>
+</div>
+<div class="f" id="eod-col-late-wrap" style="display:none">
+<label>Main reason for late collections <span class="r">*</span></label>
+<select id="eod-col-late-reason"><option value="">Select reason...</option><option>Not ready on arrival</option><option>Late release from depot</option><option>Customer access delay</option><option>Running late on route</option><option>Other</option></select>
+</div>
+<div id="eod-col-reason-wrap" style="display:none">
 <div class="f">
 <label>Reasons for Failed Collections <span class="r">*</span></label>
 <div id="eod-col-reasons"></div>
@@ -707,6 +752,8 @@ if (!document.getElementById('sod-parcel-count').value) return showErr('Please e
       payload.start_mileage             = parseInt(document.getElementById('sod-start-mileage').value) || null;
       payload.delivery_drops_planned    = parseInt(document.getElementById('sod-delivery-drops').value) || null;
 payload.parcel_count = parseInt(document.getElementById('sod-parcel-count').value) || null;
+    payload.premium_pre10_declared = parseInt(document.getElementById('sod-pre10').value) || 0;
+    payload.premium_pre12_declared = parseInt(document.getElementById('sod-pre12').value) || 0;
       payload.collection_stops_planned  = parseInt(document.getElementById('sod-collection-stops').value) || null;
     }
 
@@ -952,6 +999,24 @@ function skipVehicleCheck() {
   showScreen('sod');
 }
 
+function togglePremiumReason(k) {
+  const n = parseInt(document.getElementById('eod-failed-' + k).value) || 0;
+  document.getElementById('eod-' + k + '-reason-wrap').style.display = n > 0 ? '' : 'none';
+  if (!n) document.getElementById('eod-' + k + '-reason').value = '';
+}
+
+function updateLateCollections() {
+  const sc = parseInt(document.getElementById('eod-successful-collections').value) || 0;
+  const ot = document.getElementById('eod-col-ontime').value;
+  const late = ot === '' ? 0 : Math.max(0, sc - (parseInt(ot) || 0));
+  document.getElementById('eod-col-late-wrap').style.display = late > 0 ? '' : 'none';
+  if (!late) document.getElementById('eod-col-late-reason').value = '';
+  document.getElementById('eod-col-late-hint').textContent = ot === '' ? 'Of your successful stops, how many were collected within the collection window.' : (late + ' late of ' + sc + ' successful stops.');
+}
+document.addEventListener('input', function(e) {
+  if (e.target && (e.target.id === 'eod-successful-collections' || e.target.id === 'eod-col-ontime')) updateLateCollections();
+});
+
 const DEL_REASONS = ['Customer Unavailable','Address Query','Missing / Lost','Rejected by Customer','CFWD / Out of Time','Business Closed','Access Restricted'];
 const COL_REASONS = ['CFWD','Not Ready','Customer Unavailable','Cancelled'];
 function renderReasons(type) {
@@ -1005,6 +1070,24 @@ const failedDelReason = reasonSummary(delBreakdown);
   if (failedDrops === '')  return showErr('Please enter failed delivery drops (0 if none).');
   if (parseInt(failedDrops) > 0 && reasonTotal(delBreakdown) !== parseInt(failedDrops)) return showErr('Failed delivery reasons must add up to ' + failedDrops + '.');
 
+  const pre10 = parseInt(document.getElementById('eod-failed-pre10').value) || 0;
+  const pre12 = parseInt(document.getElementById('eod-failed-pre12').value) || 0;
+  const pre10Reason = document.getElementById('eod-pre10-reason').value;
+  const pre12Reason = document.getElementById('eod-pre12-reason').value;
+  if (pre10 + pre12 > (parseInt(failedDrops) || 0)) return showErr('Failed pre-10 plus pre-12 drops cannot be more than your total failed drops.');
+  if (pre10 > 0 && !pre10Reason) return showErr('Select a reason for the failed pre-10 drops.');
+  if (pre12 > 0 && !pre12Reason) return showErr('Select a reason for the failed pre-12 drops.');
+  const colSucc = parseInt(document.getElementById('eod-successful-collections').value) || 0;
+  const colOnTimeRaw = document.getElementById('eod-col-ontime').value;
+  let colOnTime = 0, colLate = 0;
+  const colLateReason = document.getElementById('eod-col-late-reason').value;
+  if (isDHL && colSucc > 0) {
+    if (colOnTimeRaw === '') return showErr('Enter how many collections were on time.');
+    colOnTime = parseInt(colOnTimeRaw) || 0;
+    if (colOnTime > colSucc) return showErr('On time collections cannot be more than successful collection stops.');
+    colLate = colSucc - colOnTime;
+    if (colLate > 0 && !colLateReason) return showErr('Select the main reason for the late collections.');
+  }
   let successCols = 0, parcelsColl = 0, failedCols = 0, failedColReason = '', colBreakdown = {};
   if (isDHL) {
     successCols    = document.getElementById('eod-successful-collections').value;
@@ -1032,6 +1115,10 @@ failedColReason = reasonSummary(colBreakdown);
       failed_delivery_drops:      parseInt(failedDrops) || 0,
       failed_delivery_reason:     failedDelReason || null,
 failed_delivery_breakdown: delBreakdown,
+      failed_pre10: pre10,
+      failed_pre10_reason: pre10 > 0 ? pre10Reason : null,
+      failed_pre12: pre12,
+      failed_pre12_reason: pre12 > 0 ? pre12Reason : null,
       eod_submitted_at:           new Date().toISOString(),
       status:                     'eod_complete',
     };
@@ -1042,6 +1129,9 @@ failed_delivery_breakdown: delBreakdown,
       payload.failed_collections          = parseInt(failedCols) || 0;
       payload.failed_collection_reason    = failedColReason || null;
 payload.failed_collection_breakdown = colBreakdown;
+      payload.collections_on_time = colOnTime;
+      payload.collections_late = colLate;
+      payload.collections_late_reason = colLate > 0 ? colLateReason : null;
     }
 
     await sbFetch(`driver_shifts?id=eq.${currentShift.id}`, {
