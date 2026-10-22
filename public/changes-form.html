@@ -121,8 +121,8 @@ async function init() {
   $('date').value = localDate();
   try { $('by').value = localStorage.getItem('kban_changes_by') || ''; } catch (e) {}
   try {
-    const rows = await sb('driver_pins?active=eq.true&select=name,depot&order=name');
-    rows.forEach(r => { (drivers[r.depot] = drivers[r.depot] || []); if (drivers[r.depot].indexOf(r.name) < 0) drivers[r.depot].push(r.name); });
+    const rows = await sb('driver_pins?active=eq.true&select=driver_name,depot&order=driver_name');
+    rows.forEach(r => { (drivers[r.depot] = drivers[r.depot] || []); if (drivers[r.depot].indexOf(r.driver_name) < 0) drivers[r.depot].push(r.driver_name); });
   } catch (e) { show('err', 'Could not load drivers. Check your signal and refresh.'); }
 }
 function fillDrivers() {
