@@ -322,7 +322,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   </div>
 
   <button class="btn" id="sod-btn" onclick="submitSOD()">Submit Start of Day</button>
-  <p class="snote">Your lead will add your departure time when you check out</p>
+  <p class="snote">You will enter the time you leave the depot on the next screen</p>
 
 </div><!-- /screen-sod -->
 
@@ -341,13 +341,13 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   <div class="card">
     <div class="ch"><h2>Start of Day Submitted</h2></div>
     <div class="cb">
-      <div class="alert alert-ok">✓ Your start-of-day has been recorded. Check out with your depot lead before departing.</div>
+      <div class="alert alert-ok">✓ Your start-of-day has been recorded. Enter the time you leave the depot below.</div>
       <div class="smeta" id="waiting-summary"></div>
-      <div class="alert alert-warn" style="margin-top:12px">⏳ Your lead will mark your departure time when you check out. Come back here at the end of your route to submit your end-of-day.</div>
+      <div id="dep-block" style="margin-top:12px"></div>
     </div>
   </div>
 
-  <button class="btn sec" onclick="showEOD()">I'm Back — Submit End of Day →</button>
+  <button class="btn sec" id="eod-go-btn" onclick="showEOD()" style="display:none">I'm Back — Submit End of Day →</button>
 
 </div><!-- /screen-waiting -->
 
@@ -477,7 +477,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   </div>
 
   <button class="btn" id="eod-btn" onclick="submitEOD()">Submit End of Day</button>
-  <p class="snote">Your depot lead will review and confirm before closing the day</p>
+  <p class="snote">Check your figures before you submit. This is final.</p>
 
 </div><!-- /screen-eod -->
 
@@ -490,7 +490,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <h2 id="s-title">Submitted</h2>
     <p id="s-body">Your end-of-day has been recorded.</p>
     <div class="smeta" id="s-meta"></div>
-    <p style="font-size:13px;color:var(--muted);margin-top:12px">Your depot lead will review your figures and confirm. Have a good evening.</p>
+    <p style="font-size:13px;color:var(--muted);margin-top:12px">Your day is complete. Have a good evening.</p>
   </div>
 </div><!-- /screen-success -->
 
@@ -721,7 +721,9 @@ if (dayType === 'standard' && !(currentVehicleCheck && currentVehicleCheck.id)) 
     if (!timeAtDepot)   return showErr('Please enter your time at depot.');
     if (!plannedReturn) return showErr('Please enter your planned return time.');
     if (!postcodes)     return showErr('Please enter your postcodes or route area.');
-    if (!startMileage)  return showErr('Please enter your start mileage.');
+    if (!startMileage) return showErr('Please enter your start mileage.');
+    const startMileageErr = checkMileage(startMileage, 'start mileage');
+    if (startMileageErr) return showErr(startMileageErr);
     if (!deliveryDrops) return showErr('Please enter your delivery drops.');
 if (!document.getElementById('sod-parcel-count').value) return showErr('Please enter your parcel count.');
   }
@@ -758,6 +760,14 @@ payload.parcel_count = parseInt(document.getElementById('sod-parcel-count').valu
     }
 
     payload.vehicle_check_id = (currentVehicleCheck && currentVehicleCheck.id) || null;
+    const sodFlags = [];
+    try {
+      if (currentVehicleCheck && currentVehicleCheck.vehicle_reg && payload.start_mileage) {
+        const prev = await sbFetch('driver_shifts?vehicle_reg=eq.' + encodeURIComponent(currentVehicleCheck.vehicle_reg) + '&end_mileage=not.is.null&select=end_mileage&order=shift_date.desc,eod_submitted_at.desc&limit=1');
+        if (prev && prev.length && Math.abs(payload.start_mileage - prev[0].end_mileage) > 25) sodFlags.push('start_mileage_mismatch');
+      }
+    } catch (e) {}
+    payload.data_flags = sodFlags;
 payload.vehicle_reg = (currentVehicleCheck && currentVehicleCheck.vehicle_reg) || null;
 const result = await sbFetch('driver_shifts', {
       method: 'POST',
@@ -778,6 +788,7 @@ const result = await sbFetch('driver_shifts', {
 }
 
 function renderWaitingScreen() {
+  renderDepartureBlock();
   const s = currentShift;
   const isDHL = currentDriver.client === 'DHL';
   let html = `<strong>Driver</strong>${s.driver_name}`;
@@ -792,13 +803,14 @@ if (s.parcel_count) html += '<strong>Parcels Declared</strong>' + s.parcel_count
     if (s.postcodes)              html += `<strong>Route Area</strong>${s.postcodes}`;
     if (s.start_mileage)          html += `<strong>Start Mileage</strong>${s.start_mileage}`;
   }
-  if (s.depot_departure_time)     html += `<strong>Departure Time (set by lead)</strong>${s.depot_departure_time} ✓`;
+  if (s.depot_departure_time)     html += `<strong>Left Depot At</strong>${s.depot_departure_time} ✓`;
   document.getElementById('waiting-summary').innerHTML = html;
   document.getElementById('hdr-sub').textContent = currentDriver.name + ' · ' + currentDriver.depot;
   showScreen('waiting');
 }
 
 function showEOD() {
+  if (currentShift && currentShift.day_type === 'standard' && !currentShift.depot_departure_time) { showErr('Enter the time you left the depot before you submit your end of day.'); return; }
   const isDHL = currentDriver.client === 'DHL';
   const s = currentShift;
 
@@ -1017,6 +1029,70 @@ document.addEventListener('input', function(e) {
   if (e.target && (e.target.id === 'eod-successful-collections' || e.target.id === 'eod-col-ontime')) updateLateCollections();
 });
 
+function checkMileage(v, label) {
+  const m = String(v).trim();
+  if (!/^[0-9]+$/.test(m)) return 'Enter your ' + label + ' as whole miles.';
+  if (m.length < 3) return 'That ' + label + ' looks too low. Enter the full reading from your dashboard.';
+  if (/^([0-9])\1+$/.test(m) || '0123456789'.indexOf(m) >= 0 || '9876543210'.indexOf(m) >= 0) return 'That ' + label + ' does not look like a real reading. Enter the figure from your dashboard.';
+  return null;
+}
+
+function mergeFlags(a, b) {
+  const out = Array.isArray(a) ? a.slice() : [];
+  (b || []).forEach(function(f) { if (out.indexOf(f) < 0) out.push(f); });
+  return out;
+}
+
+function renderDepartureBlock() {
+  const s = currentShift;
+  const blk = document.getElementById('dep-block');
+  const go = document.getElementById('eod-go-btn');
+  if (!s || !blk || !go) return;
+  const training = s.day_type !== 'standard';
+  if (training) {
+    blk.innerHTML = '<div class="alert alert-info">Training day. Come back here at the end of the day to submit your end of day.</div>';
+    go.style.display = '';
+  } else if (s.depot_departure_time) {
+    blk.innerHTML = '<div class="alert alert-ok">You left the depot at ' + String(s.depot_departure_time).slice(0, 5) + '. Come back here when you finish your route to submit your end of day.</div>';
+    go.style.display = '';
+  } else {
+    const now = new Date().toTimeString().slice(0, 5);
+    blk.innerHTML = '<div class="f"><label>Time you left the depot <span class="r">*</span></label><input type="time" id="dep-time" value="' + now + '"></div><button class="btn" id="dep-btn" onclick="submitDeparture()">I have left the depot</button>';
+    go.style.display = 'none';
+  }
+}
+
+async function submitDeparture() {
+  clearErr();
+  const t = document.getElementById('dep-time').value;
+  if (!t) return showErr('Enter the time you left the depot.');
+  const s = currentShift;
+  const arrived = s.time_at_depot ? String(s.time_at_depot).slice(0, 5) : '';
+  if (arrived && t < arrived) return showErr('Your departure time cannot be earlier than your time at the depot (' + arrived + ').');
+  const btn = document.getElementById('dep-btn');
+  btn.disabled = true;
+  showLoading('Saving...');
+  try {
+    const flags = Array.isArray(s.data_flags) ? s.data_flags.slice() : [];
+    const parts = t.split(':');
+    const claimed = new Date();
+    claimed.setHours(parseInt(parts[0]), parseInt(parts[1]), 0, 0);
+    if (new Date() - claimed > 30 * 60000) flags.push('late_departure_entry');
+    const res = await sbFetch('driver_shifts?id=eq.' + s.id, {
+      method: 'PATCH',
+      prefer: 'return=representation',
+      body: JSON.stringify({ depot_departure_time: t, departure_set_by: currentDriver.name, departure_set_at: new Date().toISOString(), data_flags: flags })
+    });
+    currentShift = Array.isArray(res) ? res[0] : res;
+    hideLoading();
+    renderDepartureBlock();
+  } catch (e) {
+    hideLoading();
+    btn.disabled = false;
+    showErr('Failed to save. ' + e.message);
+  }
+}
+
 const DEL_REASONS = ['Customer Unavailable','Address Query','Missing / Lost','Rejected by Customer','CFWD / Out of Time','Business Closed','Access Restricted'];
 const COL_REASONS = ['CFWD','Not Ready','Customer Unavailable','Cancelled'];
 function renderReasons(type) {
@@ -1066,6 +1142,22 @@ const failedDelReason = reasonSummary(delBreakdown);
   if (!endMileage)   return showErr('Please enter your end mileage.');
   if (!timeAtDepot)  return showErr('Please enter your time back at depot.');
   if (!lastDelivery) return showErr('Please enter the time of your last delivery.');
+  const depTime = currentShift && currentShift.depot_departure_time ? String(currentShift.depot_departure_time).slice(0, 5) : '';
+  if (depTime && timeAtDepot < depTime) return showErr('Your time back at the depot cannot be earlier than your departure time (' + depTime + ').');
+  if (depTime && lastDelivery < depTime) return showErr('Your last delivery time cannot be earlier than your departure time (' + depTime + ').');
+  if (lastDelivery > timeAtDepot) return showErr('Your last delivery time cannot be later than your time back at the depot.');
+  const endMileageErr = checkMileage(endMileage, 'end mileage');
+  if (endMileageErr) return showErr(endMileageErr);
+  const eodFlags = [];
+  const startMi = currentShift ? parseInt(currentShift.start_mileage) : 0;
+  if (startMi) {
+    const endMi = parseInt(endMileage);
+    if (endMi <= startMi) return showErr('Your end mileage must be higher than your start mileage (' + startMi + ').');
+    const dist = endMi - startMi;
+    if (dist > 700) return showErr('That is ' + dist + ' miles for one day. Check your end mileage.');
+    if (dist > 250) eodFlags.push('high_mileage');
+    if (dist < 10) eodFlags.push('low_mileage');
+  }
   if (successDrops === '') return showErr('Please enter successful delivery drops (0 if none).');
   if (failedDrops === '')  return showErr('Please enter failed delivery drops (0 if none).');
   if (parseInt(failedDrops) > 0 && reasonTotal(delBreakdown) !== parseInt(failedDrops)) return showErr('Failed delivery reasons must add up to ' + failedDrops + '.');
@@ -1119,7 +1211,8 @@ failed_delivery_breakdown: delBreakdown,
       failed_pre10_reason: pre10 > 0 ? pre10Reason : null,
       failed_pre12: pre12,
       failed_pre12_reason: pre12 > 0 ? pre12Reason : null,
-      eod_submitted_at:           new Date().toISOString(),
+      eod_submitted_at: new Date().toISOString(),
+      data_flags: mergeFlags(currentShift && currentShift.data_flags, eodFlags),
       status:                     'eod_complete',
     };
 
@@ -1156,7 +1249,7 @@ payload.failed_collection_breakdown = colBreakdown;
     metaHtml += `<strong>Mileage</strong>${currentShift.start_mileage || '?'} → ${endMileage} (${endMileage - (currentShift.start_mileage||0)} miles)`;
 
     document.getElementById('s-title').textContent = 'End of Day Submitted';
-    document.getElementById('s-body').textContent  = 'Your figures have been saved. Your depot lead will review and confirm.';
+    document.getElementById('s-body').textContent  = 'Your figures have been saved.';
     document.getElementById('s-meta').innerHTML    = metaHtml;
     showScreen('success');
 
