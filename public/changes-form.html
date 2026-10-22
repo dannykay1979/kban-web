@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KBAN Daily Changes</title>
+<style>
+  :root { --navy:#0B2E4E; --bg:#F3F5F8; --line:#D5DAE1; --red:#B42318; --green:#146C2E; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:Arial,Helvetica,sans-serif; background:var(--bg); color:#1b2430; font-size:16px; }
+  header { background:var(--navy); color:#fff; padding:14px 16px; font-weight:bold; font-size:18px; }
+  main { max-width:560px; margin:0 auto; padding:16px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  label { display:block; font-weight:bold; font-size:14px; margin:12px 0 4px; }
+  select, input, textarea { width:100%; padding:12px; font-size:16px; border:1px solid var(--line); border-radius:8px; background:#fff; font-family:inherit; }
+  textarea { min-height:70px; }
+  button { width:100%; padding:14px; margin-top:16px; background:var(--navy); color:#fff; border:0; border-radius:8px; font-size:16px; font-weight:bold; }
+  button:disabled { opacity:.5; }
+  .msg { padding:10px 12px; border-radius:8px; margin-top:12px; font-size:14px; display:none; }
+  .msg.err { background:#FDE8E8; color:var(--red); display:block; }
+  .msg.ok { background:#E3F4E8; color:var(--green); display:block; }
+  .hint { font-size:13px; color:#5b6675; margin-top:4px; }
+  .row { border-top:1px solid var(--line); padding:10px 0; font-size:14px; }
+  .row:first-child { border-top:0; }
+  .tag { display:inline-block; background:#EEF1F5; border-radius:6px; padding:2px 8px; font-weight:bold; font-size:12px; margin-right:6px; }
+  .hide { display:none; }
+  h2 { font-size:16px; margin:0 0 8px; }
+</style>
+</head>
+<body>
+<header>KBAN Daily Changes</header>
+<main>
+  <div class="card">
+    <h2>Log a change to today's rota</h2>
+    <div class="hint">Use this for sickness, no shows, swaps and extra drivers. Do not edit the rota itself.</div>
+
+    <label for="depot">Depot</label>
+    <select id="depot"><option value="">Select depot</option></select>
+
+    <label for="date">Date</label>
+    <input type="date" id="date">
+
+    <label for="type">What happened</label>
+    <select id="type">
+      <option value="">Select</option>
+      <option>Sick</option>
+      <option>No show</option>
+      <option>Annual leave</option>
+      <option>Day off swap</option>
+      <option>Late start</option>
+      <option>Extra driver (not on rota)</option>
+      <option>Route or van swap</option>
+      <option>Other</option>
+    </select>
+
+    <label for="driver">Driver</label>
+    <select id="driver"><option value="">Select depot first</option></select>
+
+    <div id="w-time" class="hide">
+      <label for="time">Expected start time</label>
+      <input type="time" id="time">
+    </div>
+    <div id="w-cover" class="hide">
+      <label for="cover">Covering for</label>
+      <select id="cover"><option value="">Nobody in particular</option></select>
+    </div>
+    <div id="w-route" class="hide">
+      <label for="route">New route or temp ID</label>
+      <input type="text" id="route" placeholder="e.g. RC Temp 2">
+    </div>
+
+    <label for="notes">Notes <span id="notes-req" class="hide">(required)</span></label>
+    <textarea id="notes" placeholder="Short and factual"></textarea>
+
+    <label for="by">Logged by</label>
+    <input type="text" id="by" placeholder="Your name">
+
+    <button id="go">Save change</button>
+    <div id="msg" class="msg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Changes logged for <span id="list-title"></span></h2>
+    <div id="list"><div class="hint">Select a depot to see changes.</div></div>
+  </div>
+</main>
+
+<script>
+const SUPABASE_URL = 'https://eacaudjkppyhpsjzoakv.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhY2F1ZGprcHB5aHBzanpvYWt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1NDYwNzYsImV4cCI6MjA5ODEyMjA3Nn0.oxPp4xwKyt7MjeefQiC8zKApzwydlqst_GY1WyLVmxU';
+const DEPOTS = ['DHL Middleton', 'DHL Runcorn', 'DPD Aberdeen', 'DPD Edinburgh'];
+let drivers = {};
+
+async function sb(path, opts) {
+  opts = opts || {};
+  const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, {
+    method: opts.method || 'GET',
+    body: opts.body,
+    headers: {
+      'apikey': SUPABASE_ANON,
+      'Authorization': 'Bearer ' + SUPABASE_ANON,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal'
+    }
+  });
+  if (!res.ok) throw new Error((await res.text()) || res.status);
+  const t = await res.text();
+  return t ? JSON.parse(t) : null;
+}
+const $ = id => document.getElementById(id);
+function localDate() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function ukDate(s) { return s.split('-').reverse().join('/'); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function show(kind, text) { const m = $('msg'); m.className = 'msg ' + kind; m.textContent = text; }
+
+async function init() {
+  DEPOTS.forEach(d => { const o = document.createElement('option'); o.value = d; o.textContent = d; $('depot').appendChild(o); });
+  $('date').value = localDate();
+  try { $('by').value = localStorage.getItem('kban_changes_by') || ''; } catch (e) {}
+  try {
+    const rows = await sb('driver_pins?active=eq.true&select=driver_name,depot&order=driver_name');
+    rows.forEach(r => { (drivers[r.depot] = drivers[r.depot] || []); if (drivers[r.depot].indexOf(r.driver_name) < 0) drivers[r.depot].push(r.driver_name); });
+  } catch (e) { show('err', 'Could not load drivers. Check your signal and refresh.'); }
+}
+function fillDrivers() {
+  const list = drivers[$('depot').value] || [];
+  ['driver', 'cover'].forEach(id => {
+    const s = $(id);
+    s.innerHTML = '<option value="">' + (id === 'driver' ? 'Select driver' : 'Nobody in particular') + '</option>' +
+      list.map(n => '<option>' + esc(n) + '</option>').join('');
+  });
+}
+function onType() {
+  const t = $('type').value;
+  $('w-time').classList.toggle('hide', !(t === 'Late start' || t.indexOf('Extra') === 0));
+  $('w-cover').classList.toggle('hide', t.indexOf('Extra') !== 0);
+  $('w-route').classList.toggle('hide', !(t === 'Route or van swap' || t.indexOf('Extra') === 0));
+  $('notes-req').classList.toggle('hide', !(t === 'Other' || t === 'Route or van swap' || t === 'Day off swap'));
+}
+async function loadList() {
+  const d = $('depot').value, dt = $('date').value;
+  $('list-title').textContent = d ? d + ' ' + ukDate(dt) : '';
+  if (!d || !dt) { $('list').innerHTML = '<div class="hint">Select a depot to see changes.</div>'; return; }
+  try {
+    const rows = await sb('daily_changes?depot=eq.' + encodeURIComponent(d) + '&change_date=eq.' + dt + '&order=created_at.desc');
+    $('list').innerHTML = rows.length ? rows.map(r =>
+      '<div class="row"><span class="tag">' + esc(r.change_type) + '</span><b>' + esc(r.driver_name) + '</b>' +
+      (r.replacement_for ? '<br>Covering ' + esc(r.replacement_for) : '') +
+      (r.new_route_id ? '<br>Route ' + esc(r.new_route_id) : '') +
+      (r.expected_start ? '<br>Start ' + esc(String(r.expected_start).slice(0, 5)) : '') +
+      (r.notes ? '<br>' + esc(r.notes) : '') +
+      '<br><span class="hint">Logged by ' + esc(r.logged_by) + '</span></div>').join('')
+      : '<div class="hint">Nothing logged yet.</div>';
+  } catch (e) { $('list').innerHTML = '<div class="hint">Could not load changes.</div>'; }
+}
+async function save() {
+  const v = { depot: $('depot').value, date: $('date').value, type: $('type').value, driver: $('driver').value,
+    time: $('time').value, cover: $('cover').value, route: $('route').value.trim(), notes: $('notes').value.trim(), by: $('by').value.trim() };
+  if (!v.depot) return show('err', 'Select the depot.');
+  if (!v.date) return show('err', 'Select the date.');
+  if (!v.type) return show('err', 'Select what happened.');
+  if (!v.driver) return show('err', 'Select the driver.');
+  if (v.type.indexOf('Extra') === 0 && !v.time) return show('err', 'Enter the expected start time.');
+  if (v.type === 'Late start' && !v.time) return show('err', 'Enter the expected start time.');
+  if ((v.type.indexOf('Extra') === 0 || v.type === 'Route or van swap') && !v.route) return show('err', 'Enter the route or temp ID.');
+  if ((v.type === 'Other' || v.type === 'Route or van swap' || v.type === 'Day off swap') && v.notes.length < 5) return show('err', 'Add a short note explaining the change.');
+  if (v.by.length < 2) return show('err', 'Enter your name.');
+  $('go').disabled = true;
+  try {
+    await sb('daily_changes', { method: 'POST', body: JSON.stringify({
+      change_date: v.date, depot: v.depot, driver_name: v.driver, change_type: v.type,
+      replacement_for: v.cover || null, new_route_id: v.route || null, expected_start: v.time || null,
+      notes: v.notes || null, logged_by: v.by }) });
+    try { localStorage.setItem('kban_changes_by', v.by); } catch (e) {}
+    show('ok', 'Saved: ' + v.type + ', ' + v.driver + '.');
+    $('type').value = ''; $('driver').value = ''; $('time').value = ''; $('cover').value = ''; $('route').value = ''; $('notes').value = '';
+    onType(); loadList();
+  } catch (e) { show('err', 'Not saved. Check your signal and try again.'); }
+  $('go').disabled = false;
+}
+$('depot').addEventListener('change', () => { fillDrivers(); loadList(); });
+$('date').addEventListener('change', loadList);
+$('type').addEventListener('change', onType);
+$('go').addEventListener('click', save);
+init();
+</script>
+</body>
+</html>
