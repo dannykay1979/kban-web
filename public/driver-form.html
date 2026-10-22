@@ -99,6 +99,9 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .dtype-btn .rate{display:block;font-size:11px;font-weight:400;color:var(--muted);margin-top:2px}
 .dtype-btn.active .rate{color:var(--blue)}
 
+.reason-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.reason-row span{flex:1;font-size:14px}
+.reason-row input{width:84px;padding:10px;text-align:center}
 /* optional field */
 .optional-badge{font-size:10px;font-weight:400;text-transform:none;color:var(--muted);margin-left:4px;letter-spacing:0}
 </style>
@@ -233,8 +236,12 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
         <div class="f">
           <label>Delivery Drops <span class="r">*</span></label>
           <input type="number" id="sod-delivery-drops" placeholder="e.g. 77" inputmode="numeric">
-        </div>
-      </div>
+</div>
+<div class="f">
+<label>Parcels <span class="r">*</span></label>
+<input type="number" id="sod-parcel-count" placeholder="e.g. 112" inputmode="numeric">
+</div>
+</div>
       <div class="f" id="sod-collections-wrap">
         <label>Collection Stops <span class="optional-badge">(DHL only)</span></label>
         <input type="number" id="sod-collection-stops" placeholder="e.g. 13" inputmode="numeric">
@@ -320,11 +327,12 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
         </div>
       </div>
       <div id="eod-del-reason-wrap" style="display:none">
-        <div class="f">
-          <label>Reason for Failed Deliveries <span class="r">*</span></label>
-          <textarea id="eod-del-reason" placeholder="e.g. No access, customer not home, wrong address..." rows="3"></textarea>
-        </div>
-      </div>
+<div class="f">
+<label>Reasons for Failed Deliveries <span class="r">*</span></label>
+<div id="eod-del-reasons"></div>
+<div class="hint" id="eod-del-reason-total"></div>
+</div>
+</div>
     </div>
   </div>
 
@@ -350,11 +358,12 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
         <div class="f"></div>
       </div>
       <div id="eod-col-reason-wrap" style="display:none">
-        <div class="f">
-          <label>Reason for Failed Collections <span class="r">*</span></label>
-          <textarea id="eod-col-reason" placeholder="e.g. Business closed, no one available..." rows="3"></textarea>
-        </div>
-      </div>
+<div class="f">
+<label>Reasons for Failed Collections <span class="r">*</span></label>
+<div id="eod-col-reasons"></div>
+<div class="hint" id="eod-col-reason-total"></div>
+</div>
+</div>
     </div>
   </div>
 
@@ -605,6 +614,7 @@ async function submitSOD() {
     if (!postcodes)     return showErr('Please enter your postcodes or route area.');
     if (!startMileage)  return showErr('Please enter your start mileage.');
     if (!deliveryDrops) return showErr('Please enter your delivery drops.');
+if (!document.getElementById('sod-parcel-count').value) return showErr('Please enter your parcel count.');
   }
 
   const btn = document.getElementById('sod-btn');
@@ -632,6 +642,7 @@ async function submitSOD() {
       payload.postcodes                 = document.getElementById('sod-postcodes').value.trim() || null;
       payload.start_mileage             = parseInt(document.getElementById('sod-start-mileage').value) || null;
       payload.delivery_drops_planned    = parseInt(document.getElementById('sod-delivery-drops').value) || null;
+payload.parcel_count = parseInt(document.getElementById('sod-parcel-count').value) || null;
       payload.collection_stops_planned  = parseInt(document.getElementById('sod-collection-stops').value) || null;
     }
 
@@ -663,6 +674,7 @@ function renderWaitingScreen() {
     if (s.reported_id)            html += `<strong>Today's Route/Temp ID</strong>${s.reported_id}`;
     if (s.time_at_depot)          html += `<strong>Arrived at Depot</strong>${s.time_at_depot}`;
     if (s.delivery_drops_planned) html += `<strong>Delivery Drops Declared</strong>${s.delivery_drops_planned}`;
+if (s.parcel_count) html += '<strong>Parcels Declared</strong>' + s.parcel_count;
     if (isDHL && s.collection_stops_planned) html += `<strong>Collection Stops</strong>${s.collection_stops_planned}`;
     if (s.postcodes)              html += `<strong>Route Area</strong>${s.postcodes}`;
     if (s.start_mileage)          html += `<strong>Start Mileage</strong>${s.start_mileage}`;
@@ -694,9 +706,37 @@ function showEOD() {
 }
 
 // ── Conditional fields ────────────────────────────────────────────────────
+const DEL_REASONS = ['Customer Unavailable','Address Query','Missing / Lost','Rejected by Customer','CFWD / Out of Time','Business Closed','Access Restricted'];
+const COL_REASONS = ['CFWD','Not Ready','Customer Unavailable','Cancelled'];
+function renderReasons(type) {
+  const box = document.getElementById('eod-' + type + '-reasons');
+  if (box.children.length) return;
+  const list = type === 'del' ? DEL_REASONS : COL_REASONS;
+  box.innerHTML = list.map(function(r) {
+    return '<div class="reason-row"><span>' + r + '</span><input type="number" min="0" inputmode="numeric" placeholder="0" data-reason="' + r + '" oninput="updateReasonTotal(\'' + type + '\')"></div>';
+  }).join('');
+}
+function getReasonBreakdown(type) {
+  const out = {};
+  document.querySelectorAll('#eod-' + type + '-reasons input').forEach(function(i) {
+    const n = parseInt(i.value) || 0;
+    if (n > 0) out[i.dataset.reason] = n;
+  });
+  return out;
+}
+function reasonTotal(b) { return Object.values(b).reduce(function(a, n) { return a + n; }, 0); }
+function reasonSummary(b) { return Object.entries(b).map(function(e) { return e[0] + ' x' + e[1]; }).join(', '); }
+function updateReasonTotal(type) {
+  const failed = parseInt(document.getElementById(type === 'del' ? 'eod-failed-drops' : 'eod-failed-collections').value) || 0;
+  const total = reasonTotal(getReasonBreakdown(type));
+  const el = document.getElementById('eod-' + type + '-reason-total');
+  el.textContent = total + ' of ' + failed + ' allocated';
+  el.style.color = total === failed ? 'var(--green)' : 'var(--amber)';
+}
 function toggleFailedReason(type) {
-  const val = parseInt(document.getElementById(`eod-${type === 'del' ? 'failed-drops' : 'failed-collections'}`).value) || 0;
-  document.getElementById(`eod-${type}-reason-wrap`).style.display = val > 0 ? '' : 'none';
+  const val = parseInt(document.getElementById(type === 'del' ? 'eod-failed-drops' : 'eod-failed-collections').value) || 0;
+  document.getElementById('eod-' + type + '-reason-wrap').style.display = val > 0 ? '' : 'none';
+  if (val > 0) { renderReasons(type); updateReasonTotal(type); }
 }
 
 // ── Submit End of Day ─────────────────────────────────────────────────────
@@ -709,25 +749,27 @@ async function submitEOD() {
   const lastDelivery    = document.getElementById('eod-last-delivery-time').value;
   const successDrops    = document.getElementById('eod-successful-drops').value;
   const failedDrops     = document.getElementById('eod-failed-drops').value;
-  const failedDelReason = document.getElementById('eod-del-reason').value.trim();
+  const delBreakdown = getReasonBreakdown('del');
+const failedDelReason = reasonSummary(delBreakdown);
 
   if (!endMileage)   return showErr('Please enter your end mileage.');
   if (!timeAtDepot)  return showErr('Please enter your time back at depot.');
   if (!lastDelivery) return showErr('Please enter the time of your last delivery.');
   if (successDrops === '') return showErr('Please enter successful delivery drops (0 if none).');
   if (failedDrops === '')  return showErr('Please enter failed delivery drops (0 if none).');
-  if (parseInt(failedDrops) > 0 && !failedDelReason) return showErr('Please give a reason for failed deliveries.');
+  if (parseInt(failedDrops) > 0 && reasonTotal(delBreakdown) !== parseInt(failedDrops)) return showErr('Failed delivery reasons must add up to ' + failedDrops + '.');
 
-  let successCols = 0, parcelsColl = 0, failedCols = 0, failedColReason = '';
+  let successCols = 0, parcelsColl = 0, failedCols = 0, failedColReason = '', colBreakdown = {};
   if (isDHL) {
     successCols    = document.getElementById('eod-successful-collections').value;
     parcelsColl    = document.getElementById('eod-parcels-collected').value;
     failedCols     = document.getElementById('eod-failed-collections').value;
-    failedColReason = document.getElementById('eod-col-reason').value.trim();
+    colBreakdown = getReasonBreakdown('col');
+failedColReason = reasonSummary(colBreakdown);
     if (successCols === '')  return showErr('Please enter successful collection stops.');
     if (parcelsColl === '')  return showErr('Please enter parcels collected.');
     if (failedCols === '')   return showErr('Please enter failed collections (0 if none).');
-    if (parseInt(failedCols) > 0 && !failedColReason) return showErr('Please give a reason for failed collections.');
+    if (parseInt(failedCols) > 0 && reasonTotal(colBreakdown) !== parseInt(failedCols)) return showErr('Failed collection reasons must add up to ' + failedCols + '.');
   }
 
   const btn = document.getElementById('eod-btn');
@@ -743,6 +785,7 @@ async function submitEOD() {
       successful_delivery_drops:  parseInt(successDrops) || 0,
       failed_delivery_drops:      parseInt(failedDrops) || 0,
       failed_delivery_reason:     failedDelReason || null,
+failed_delivery_breakdown: delBreakdown,
       eod_submitted_at:           new Date().toISOString(),
       status:                     'eod_complete',
     };
@@ -752,6 +795,7 @@ async function submitEOD() {
       payload.parcels_collected           = parseInt(parcelsColl) || 0;
       payload.failed_collections          = parseInt(failedCols) || 0;
       payload.failed_collection_reason    = failedColReason || null;
+payload.failed_collection_breakdown = colBreakdown;
     }
 
     await sbFetch(`driver_shifts?id=eq.${currentShift.id}`, {
