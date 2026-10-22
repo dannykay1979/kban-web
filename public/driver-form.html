@@ -102,6 +102,19 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .reason-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
 .reason-row span{flex:1;font-size:14px}
 .reason-row input{width:84px;padding:10px;text-align:center}
+.vc-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.vc-row:last-child{border-bottom:none}
+.vc-name{font-size:14px;font-weight:600;flex:1}
+.vc-opts{display:flex;gap:6px}
+.vc-opt{padding:10px 14px;border:1.5px solid var(--border);border-radius:9px;background:var(--white);font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit}
+.vc-opt.ok{background:var(--gbg);border-color:var(--green);color:var(--green)}
+.vc-opt.def{background:var(--rbg);border-color:var(--red);color:var(--red)}
+.vc-photo{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)}
+.vc-photo:last-child{border-bottom:none}
+.vc-photo-label{flex:1;font-size:14px;font-weight:600}
+.vc-photo-btn{display:inline-block;margin:0;padding:10px 14px;border:1.5px solid var(--blue);border-radius:9px;color:var(--blue);font-size:14px;font-weight:600;text-transform:none;letter-spacing:0;cursor:pointer}
+.vc-photo-btn.done{background:var(--gbg);border-color:var(--green);color:var(--green)}
+.vc-thumb{width:44px;height:44px;object-fit:cover;border-radius:6px}
 /* optional field */
 .optional-badge{font-size:10px;font-weight:400;text-transform:none;color:var(--muted);margin-left:4px;letter-spacing:0}
 </style>
@@ -179,10 +192,59 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 <!-- ═══════════════════════════════════════════
      SCREEN 2 — START OF DAY
 ═══════════════════════════════════════════ -->
+<div class="screen" id="screen-vehicle">
+
+<div class="steps">
+<div class="step done">Sign-In</div>
+<div class="step active">Vehicle</div>
+<div class="step">Start of Day</div>
+<div class="step">End of Day</div>
+</div>
+
+<div class="alert alert-info">Complete your vehicle check before you start your day. Every check and all 6 photos are required.</div>
+
+<div class="card">
+<div class="ch"><h2>Vehicle</h2></div>
+<div class="cb">
+<div class="f">
+<label>Vehicle Reg <span class="r">*</span></label>
+<input type="text" id="vc-reg" placeholder="e.g. AB12 CDE" autocomplete="off" autocapitalize="characters" oninput="this.value=this.value.toUpperCase(); updateVcProgress()">
+</div>
+</div>
+</div>
+
+<div class="card">
+<div class="ch"><h2>Walkaround Check</h2></div>
+<div class="cb" id="vc-items"></div>
+</div>
+
+<div class="card" id="vc-notes-card" style="display:none">
+<div class="ch"><h2>Defect Details</h2></div>
+<div class="cb">
+<div class="alert alert-warn">You have reported a defect. Tell your depot lead before you leave the depot.</div>
+<div class="f">
+<label>What is the defect? <span class="r">*</span></label>
+<textarea id="vc-notes" rows="3" placeholder="Describe the defect(s)..." oninput="updateVcProgress()"></textarea>
+</div>
+</div>
+</div>
+
+<div class="card">
+<div class="ch"><h2>Photos</h2></div>
+<div class="cb" id="vc-photos"></div>
+</div>
+
+<button class="btn" id="vc-btn" onclick="submitVehicleCheck()" disabled>Submit Vehicle Check</button>
+<p class="snote" id="vc-note"></p>
+<button class="btn ghost" onclick="skipVehicleCheck()">Not driving a van today (classroom or ride-along)</button>
+
+</div><!-- /screen-vehicle -->
+
 <div class="screen" id="screen-sod">
 
   <div class="steps">
     <div class="step done">Sign-In</div>
+<div class="step done">Vehicle</div>
     <div class="step active">Start of Day</div>
     <div class="step">End of Day</div>
   </div>
@@ -261,6 +323,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 
   <div class="steps">
     <div class="step done">Sign-In</div>
+<div class="step done">Vehicle</div>
     <div class="step done">Start of Day</div>
     <div class="step">End of Day</div>
   </div>
@@ -285,6 +348,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 
   <div class="steps">
     <div class="step done">Sign-In</div>
+<div class="step done">Vehicle</div>
     <div class="step done">Start of Day</div>
     <div class="step active">End of Day</div>
   </div>
@@ -557,7 +621,7 @@ async function attemptLogin() {
       document.getElementById('sod-welcome').textContent = `Good morning, ${driver.driver_name}. Complete your start-of-day details below before departing.`;
       document.getElementById('sod-collections-wrap').style.display = driver.client === 'DHL' ? '' : 'none';
       document.getElementById('hdr-sub').textContent = driver.driver_name + ' · ' + driver.depot;
-      showScreen('sod');
+      await routeAfterLogin();
     } else if (currentShift.status === 'sod_complete') {
       renderWaitingScreen();
     } else if (currentShift.status === 'eod_complete') {
@@ -573,15 +637,14 @@ async function attemptLogin() {
 
 // ── Day type grid ─────────────────────────────────────────────────────────
 function buildDayTypeGrid(client) {
+  const skipped = !!(currentVehicleCheck && currentVehicleCheck.skipped);
+  const types = DAY_TYPES.filter(function(t) { return t.clients.includes(client) && (!skipped || t.key !== 'standard'); });
+  const first = types.length ? types[0].key : 'standard';
   const grid = document.getElementById('dtype-grid');
-  const types = DAY_TYPES.filter(t => t.clients.includes(client));
-  grid.innerHTML = types.map(t => `
-    <button class="dtype-btn${t.key === 'standard' ? ' active' : ''}" onclick="selectDayType('${t.key}')" id="dtype-${t.key}">
-      ${t.label}${t.rate ? `<span class="rate">${t.rate} flat rate</span>` : ''}
-    </button>
-  `).join('');
-  // Show/hide route fields based on selection
-  selectDayType('standard');
+  grid.innerHTML = types.map(function(t) {
+    return '<button class="dtype-btn' + (t.key === first ? ' active' : '') + '" onclick="selectDayType(\'' + t.key + '\')" id="dtype-' + t.key + '">' + t.label + (t.rate ? '<span class="rate">' + t.rate + ' flat rate</span>' : '') + '</button>';
+  }).join('');
+  selectDayType(first);
 }
 
 function selectDayType(key) {
@@ -597,7 +660,8 @@ function selectDayType(key) {
 
 // ── Submit Start of Day ───────────────────────────────────────────────────
 async function submitSOD() {
-  clearErr();
+clearErr();
+if (dayType === 'standard' && !(currentVehicleCheck && currentVehicleCheck.id)) return showErr('Complete your vehicle check before starting your day.');
   const isTraining = dayType !== 'standard';
 
   if (!isTraining) {
@@ -646,7 +710,9 @@ payload.parcel_count = parseInt(document.getElementById('sod-parcel-count').valu
       payload.collection_stops_planned  = parseInt(document.getElementById('sod-collection-stops').value) || null;
     }
 
-    const result = await sbFetch('driver_shifts', {
+    payload.vehicle_check_id = (currentVehicleCheck && currentVehicleCheck.id) || null;
+payload.vehicle_reg = (currentVehicleCheck && currentVehicleCheck.vehicle_reg) || null;
+const result = await sbFetch('driver_shifts', {
       method: 'POST',
       prefer: 'return=representation',
       body: JSON.stringify(payload),
@@ -706,6 +772,186 @@ function showEOD() {
 }
 
 // ── Conditional fields ────────────────────────────────────────────────────
+let currentVehicleCheck = null;
+let vcState = {};
+let vcPhotos = {};
+const VC_ITEMS = ['Tyres and wheels','Lights and indicators','Brakes','Mirrors','Windscreen and wipers','Horn','Bodywork damage','Load area and doors','Fluid leaks','Dashboard warning lights'];
+const VC_PHOTOS = [{key:'nearside',label:'Nearside'},{key:'offside',label:'Offside'},{key:'front',label:'Front'},{key:'rear',label:'Rear'},{key:'windscreen',label:'Windscreen'},{key:'cab',label:'Cab interior'}];
+
+function localDate() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+async function routeAfterLogin() {
+  let vc = null;
+  try {
+    const rows = await sbFetch('vehicle_checks?driver_name=eq.' + encodeURIComponent(currentDriver.name) + '&depot=eq.' + encodeURIComponent(currentDriver.depot) + '&check_date=eq.' + localDate() + '&select=id,vehicle_reg&order=created_at.desc&limit=1');
+    vc = rows && rows.length ? rows[0] : null;
+  } catch (e) {
+    clearPin();
+    showScreen('login');
+    showErr('Could not check your vehicle check status. Check your connection and try again.');
+    return;
+  }
+  currentVehicleCheck = vc;
+  if (vc) {
+    showScreen('sod');
+  } else {
+    buildVehicleCheckForm();
+    showScreen('vehicle');
+  }
+}
+
+function buildVehicleCheckForm() {
+  vcState = {};
+  vcPhotos = {};
+  document.getElementById('vc-reg').value = '';
+  document.getElementById('vc-notes').value = '';
+  document.getElementById('vc-notes-card').style.display = 'none';
+  document.getElementById('vc-items').innerHTML = VC_ITEMS.map(function(name, i) {
+    return '<div class="vc-row"><div class="vc-name">' + name + '</div><div class="vc-opts"><button type="button" class="vc-opt" id="vc-ok-' + i + '" onclick="setVcItem(' + i + ', true)">OK</button><button type="button" class="vc-opt" id="vc-def-' + i + '" onclick="setVcItem(' + i + ', false)">Defect</button></div></div>';
+  }).join('');
+  document.getElementById('vc-photos').innerHTML = VC_PHOTOS.map(function(p) {
+    return '<div class="vc-photo"><img class="vc-thumb" id="vc-thumb-' + p.key + '" style="display:none" alt=""><div class="vc-photo-label">' + p.label + '</div><label class="vc-photo-btn" id="vc-pbtn-' + p.key + '">Take photo<input type="file" accept="image/*" capture="environment" style="display:none" onchange="onVcPhoto(\'' + p.key + '\', this)"></label></div>';
+  }).join('');
+  updateVcProgress();
+}
+
+function setVcItem(i, ok) {
+  vcState[i] = ok;
+  document.getElementById('vc-ok-' + i).className = 'vc-opt' + (ok ? ' ok' : '');
+  document.getElementById('vc-def-' + i).className = 'vc-opt' + (ok ? '' : ' def');
+  const anyDefect = VC_ITEMS.some(function(n, idx) { return vcState[idx] === false; });
+  document.getElementById('vc-notes-card').style.display = anyDefect ? '' : 'none';
+  updateVcProgress();
+}
+
+function compressImage(file) {
+  return new Promise(function(resolve, reject) {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = function() {
+      const max = 1280;
+      let w = img.width, h = img.height;
+      if (w > max || h > max) {
+        const sc = max / Math.max(w, h);
+        w = Math.round(w * sc);
+        h = Math.round(h * sc);
+      }
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      c.toBlob(function(b) { if (b) resolve(b); else reject(new Error('Could not process the photo. Please try again.')); }, 'image/jpeg', 0.72);
+    };
+    img.onerror = function() { reject(new Error('Could not read the photo. Please try again.')); };
+    img.src = url;
+  });
+}
+
+async function onVcPhoto(key, input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  try {
+    const blob = await compressImage(file);
+    vcPhotos[key] = blob;
+    const thumb = document.getElementById('vc-thumb-' + key);
+    thumb.src = URL.createObjectURL(blob);
+    thumb.style.display = '';
+    const btn = document.getElementById('vc-pbtn-' + key);
+    btn.className = 'vc-photo-btn done';
+    btn.firstChild.nodeValue = 'Retake';
+  } catch (e) {
+    showErr(e.message);
+  }
+  updateVcProgress();
+}
+
+function vcComplete() {
+  if (!document.getElementById('vc-reg').value.trim()) return false;
+  for (let i = 0; i < VC_ITEMS.length; i++) {
+    if (typeof vcState[i] !== 'boolean') return false;
+  }
+  const anyDefect = VC_ITEMS.some(function(n, i) { return vcState[i] === false; });
+  if (anyDefect && !document.getElementById('vc-notes').value.trim()) return false;
+  for (let j = 0; j < VC_PHOTOS.length; j++) {
+    if (!vcPhotos[VC_PHOTOS[j].key]) return false;
+  }
+  return true;
+}
+
+function updateVcProgress() {
+  const checked = VC_ITEMS.filter(function(n, i) { return typeof vcState[i] === 'boolean'; }).length;
+  const photos = VC_PHOTOS.filter(function(p) { return vcPhotos[p.key]; }).length;
+  document.getElementById('vc-note').textContent = checked + ' of ' + VC_ITEMS.length + ' checks done, ' + photos + ' of ' + VC_PHOTOS.length + ' photos taken';
+  document.getElementById('vc-btn').disabled = !vcComplete();
+}
+
+async function submitVehicleCheck() {
+  clearErr();
+  if (!vcComplete()) return showErr('Complete every check and take all 6 photos.');
+  const btn = document.getElementById('vc-btn');
+  btn.disabled = true;
+  showLoading('Uploading photos...');
+  try {
+    const todayStr = localDate();
+    const safe = function(t) { return String(t).replace(/[^A-Za-z0-9]+/g, '-'); };
+    const folder = todayStr + '/' + safe(currentDriver.depot) + '/' + safe(currentDriver.name) + '-' + Date.now();
+    const paths = {};
+    await Promise.all(VC_PHOTOS.map(async function(p) {
+      const path = folder + '/' + p.key + '.jpg';
+      const res = await fetch(SUPABASE_URL + '/storage/v1/object/vehicle-checks/' + path, {
+        method: 'POST',
+        headers: { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'image/jpeg' },
+        body: vcPhotos[p.key]
+      });
+      if (!res.ok) throw new Error('Photo upload failed (' + p.label + '). Check your connection and try again.');
+      paths[p.key] = path;
+    }));
+    const checks = {};
+    VC_ITEMS.forEach(function(n, i) { checks[n] = vcState[i] ? 'ok' : 'defect'; });
+    const hasDefects = VC_ITEMS.some(function(n, i) { return vcState[i] === false; });
+    const row = {
+      check_date: todayStr,
+      driver_name: currentDriver.name,
+      depot: currentDriver.depot,
+      client: currentDriver.client,
+      vehicle_reg: document.getElementById('vc-reg').value.trim().toUpperCase(),
+      checks: checks,
+      has_defects: hasDefects,
+      defect_notes: hasDefects ? document.getElementById('vc-notes').value.trim() : null,
+      photo_nearside: paths.nearside,
+      photo_offside: paths.offside,
+      photo_front: paths.front,
+      photo_rear: paths.rear,
+      photo_windscreen: paths.windscreen,
+      photo_cab: paths.cab
+    };
+    showLoading('Saving vehicle check...');
+    const result = await sbFetch('vehicle_checks', { method: 'POST', prefer: 'return=representation', body: JSON.stringify(row) });
+    currentVehicleCheck = Array.isArray(result) ? result[0] : result;
+    hideLoading();
+    if (hasDefects) {
+      const w = document.getElementById('sod-welcome');
+      w.textContent = w.textContent + ' Defect reported on your vehicle: tell your depot lead before you leave.';
+    }
+    showScreen('sod');
+  } catch (e) {
+    hideLoading();
+    showErr('Failed to save. ' + e.message);
+  } finally {
+    updateVcProgress();
+  }
+}
+
+function skipVehicleCheck() {
+  currentVehicleCheck = { skipped: true };
+  buildDayTypeGrid(currentDriver.client);
+  showScreen('sod');
+}
+
 const DEL_REASONS = ['Customer Unavailable','Address Query','Missing / Lost','Rejected by Customer','CFWD / Out of Time','Business Closed','Access Restricted'];
 const COL_REASONS = ['CFWD','Not Ready','Customer Unavailable','Cancelled'];
 function renderReasons(type) {
