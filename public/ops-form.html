@@ -1390,7 +1390,7 @@ const XC_HEADERS = ['DATE', 'SITE', 'DRIVER NAME', 'ROUND / AREA NO', 'POSTCODE 
   'START MILEAGE', 'END MILEAGE', 'TOTAL MILEAGE', 'ON-ROAD HOURS', 'DEL. ASSIGNED', 'DEL. SUCCESSFUL']
   .concat(XC_DEL.map(x => 'DEL FAIL: ' + x.toUpperCase()))
   .concat(['COLL. ASSIGNED', 'COLL. SUCCESSFUL']).concat(XC_COL.map(x => 'COLL FAIL: ' + x.toUpperCase()))
-  .concat(['TOTAL JOBS', 'SUCCESS %', 'WORKED? (Y/N)', 'REASON IF NOT WORKED', 'FD / DR / TEMP ID', 'SITE WORKED', 'VAN REG TODAY', 'VAN CHANGED? (Y/N)',
+  .concat(['COLL. ON TIME (DECLARED)', 'COLL. LATE (DECLARED)', 'COLL. LATE REASON']).concat(['TOTAL JOBS', 'SUCCESS %', 'WORKED? (Y/N)', 'REASON IF NOT WORKED', 'FD / DR / TEMP ID', 'SITE WORKED', 'VAN REG TODAY', 'VAN CHANGED? (Y/N)',
     'FUEL CARD USED', 'CARD HOLDER IF NOT THIS DRIVER', 'DOUBLE RUN? (Y/N)', '2ND ROUND / SLOT ID', 'TRAINING', 'EXCEPTIONS', 'LEAD NOTES']);
 function xcHM(t) { return t ? String(t).slice(0, 5) : ''; }
 function xcBreak(obj, keys) {
@@ -1429,6 +1429,7 @@ function xcRow(date, depot, r, prevReg) {
     sm == null ? '' : sm, em == null ? '' : em, tm, hrs, s.delivery_drops_planned == null ? '' : s.delivery_drops_planned, dok],
     xcBreak(s.failed_delivery_breakdown, XC_DEL),
     [s.collection_stops_planned == null ? '' : s.collection_stops_planned, cok], xcBreak(s.failed_collection_breakdown, XC_COL),
+    [s.collections_on_time == null ? '' : s.collections_on_time, s.collections_late == null ? '' : s.collections_late, s.collections_late_reason || ''],
     [jobs, succ, 'Y', '', s.reported_id || '', depot, reg, changed, s.fuel_card || '', s.fuel_card_holder || '', s.double_run_id ? 'Y' : 'N', s.double_run_id || '', training, r.flags.join('; '), s.lead_notes || '']);
 }
 function xcCsv(rows) {
@@ -1517,7 +1518,7 @@ function xPerfAgg(rows) {
   rows.forEach(s => {
     if (s.day_type && s.day_type !== 'standard') return;
     const k = s.depot + '|' + xNorm(s.driver_name);
-    const a = agg[k] = agg[k] || { name: s.driver_name, depot: s.depot, days: 0, mins: 0, minDays: 0, miles: 0, okT: 0, ok: 0, fail: 0, parcels: 0, parcelDrops: 0 };
+    const a = agg[k] = agg[k] || { name: s.driver_name, depot: s.depot, days: 0, mins: 0, minDays: 0, miles: 0, okT: 0, ok: 0, fail: 0, parcels: 0, parcelDrops: 0, collAll: 0, collOk: 0 };
     a.days++;
     const o = xMins(s.depot_departure_time), i = xMins(s.time_at_depot_eod);
     const timed = o != null && i != null && i > o;
@@ -1526,6 +1527,7 @@ function xPerfAgg(rows) {
     if (m > 0 && m < 1000) a.miles += m;
     const ok = s.successful_delivery_drops || 0, fl = s.failed_delivery_drops || 0;
     a.ok += ok; a.fail += fl;
+    a.collAll += s.successful_collection_stops || 0; a.collOk += s.collections_on_time || 0;
     if (timed) a.okT += ok;
     if (s.parcel_count && (ok + fl) > 0) { a.parcels += s.parcel_count; a.parcelDrops += ok + fl; }
   });
@@ -1548,12 +1550,12 @@ async function xPerf(to, depot, el) {
   const num = (v, f) => v == null ? dash : '<td style="text-align:center;">' + f(v) + '</td>';
   let h = '<p style="font-size:12px;color:var(--muted);margin-bottom:8px;">7 days to ' + xUK(to) + ', completed days only, training days excluded. Lowest delivery success first. On-road hours run from depot departure to back at depot, so days without a departure time are left out of hours and drops per hour. Parcels per drop uses days with a parcel count.</p>' +
     '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;background:var(--white);border:1px solid var(--border);">' +
-    '<tr style="background:var(--navy);color:#fff;"><th style="text-align:left;padding:8px;">Driver</th><th>Days</th><th>On-road hrs</th><th>Miles</th><th>Drops done</th><th>Failed</th><th>Success</th><th>Parcels / drop</th><th>Drops / hr</th></tr>';
+    '<tr style="background:var(--navy);color:#fff;"><th style="text-align:left;padding:8px;">Driver</th><th>Days</th><th>On-road hrs</th><th>Miles</th><th>Drops done</th><th>Failed</th><th>Success</th><th>Collections on time</th><th>Parcels / drop</th><th>Drops / hr</th></tr>';
   list.forEach(a => {
     const sc = a.succ == null ? dash : '<td style="text-align:center;font-weight:700;color:' + (a.succ >= 97 ? 'var(--green)' : a.succ >= 93 ? 'var(--amber)' : 'var(--red)') + ';">' + a.succ + '%</td>';
     h += '<tr style="border-top:1px solid var(--border);"><td style="padding:8px;"><strong>' + xEsc(a.name) + '</strong><br><span style="color:var(--muted);">' + xEsc(a.depot) + '</span></td>' +
       '<td style="text-align:center;">' + a.days + '</td>' + num(a.hours, v => v.toFixed(1)) + '<td style="text-align:center;">' + a.miles + '</td>' +
-      '<td style="text-align:center;">' + a.ok + '</td><td style="text-align:center;">' + a.fail + '</td>' + sc + num(a.ppd, v => v.toFixed(2)) + num(a.dph, v => v.toFixed(1)) + '</tr>';
+      '<td style="text-align:center;">' + a.ok + '</td><td style="text-align:center;">' + a.fail + '</td>' + sc + (a.collAll ? '<td style="text-align:center;">' + a.collOk + '/' + a.collAll + ' (' + Math.round(a.collOk * 100 / a.collAll) + '%)</td>' : dash) + num(a.ppd, v => v.toFixed(2)) + num(a.dph, v => v.toFixed(1)) + '</tr>';
   });
   el.innerHTML = h + '</table></div>';
 }
