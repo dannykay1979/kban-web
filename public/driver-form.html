@@ -274,6 +274,14 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
         <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:normal"><input type="checkbox" id="sod-no-fuel-card" style="width:auto" onchange="var f=document.getElementById('sod-fuel-card');f.disabled=this.checked;if(this.checked){f.value='';}"> No fuel card today</label>
         <div class="hint">Enter the number on the fuel card you have today</div>
       </div>
+      <div class="f">
+        <label>Card holder (only if the card is not yours)</label>
+        <input type="text" id="sod-card-holder" placeholder="Name of the driver the card belongs to" autocomplete="off">
+      </div>
+      <div class="f">
+        <label>Second route / temp ID (only if doing a double run)</label>
+        <input type="text" id="sod-double-run" placeholder="e.g. FD72580" autocomplete="off" autocapitalize="characters" oninput="this.value=this.value.toUpperCase()">
+      </div>
       <div class="r2">
         <div class="f">
           <label>Time at Depot <span class="r">*</span></label>
@@ -693,7 +701,7 @@ function buildDayTypeGrid(client) {
   const first = types.length ? types[0].key : 'standard';
   const grid = document.getElementById('dtype-grid');
   grid.innerHTML = types.map(function(t) {
-    return '<button class="dtype-btn' + (t.key === first ? ' active' : '') + '" onclick="selectDayType(\'' + t.key + '\')" id="dtype-' + t.key + '">' + t.label + (t.rate ? '<span class="rate">' + t.rate + ' flat rate</span>' : '') + '</button>';
+    return '<button class="dtype-btn' + (t.key === first ? ' active' : '') + '" onclick="selectDayType(\'' + t.key + '\')" id="dtype-' + t.key + '">' + t.label + '' + '</button>';
   }).join('');
   selectDayType(first);
 }
@@ -757,6 +765,8 @@ if (!document.getElementById('sod-parcel-count').value) return showErr('Please e
 
     if (!isTraining) {
       payload.reported_id               = document.getElementById('sod-route-id').value.trim().toUpperCase() || null;
+      payload.fuel_card_holder          = document.getElementById('sod-card-holder').value.trim() || null;
+      payload.double_run_id             = document.getElementById('sod-double-run').value.trim().toUpperCase() || null;
       payload.fuel_card                 = document.getElementById('sod-no-fuel-card').checked ? 'NONE' : (function (v) { v = v.trim().toUpperCase().replace(/\s+/g, ' '); return /^\d+$/.test(v) ? 'KBAN ' + v : (v || null); })(document.getElementById('sod-fuel-card').value);
       payload.time_at_depot             = document.getElementById('sod-time-at-depot').value || null;
       payload.planned_return_time       = document.getElementById('sod-planned-return').value || null;
