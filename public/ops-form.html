@@ -1391,7 +1391,7 @@ const XC_HEADERS = ['DATE', 'SITE', 'DRIVER NAME', 'ROUND / AREA NO', 'POSTCODE 
   .concat(XC_DEL.map(x => 'DEL FAIL: ' + x.toUpperCase()))
   .concat(['COLL. ASSIGNED', 'COLL. SUCCESSFUL']).concat(XC_COL.map(x => 'COLL FAIL: ' + x.toUpperCase()))
   .concat(['TOTAL JOBS', 'SUCCESS %', 'WORKED? (Y/N)', 'REASON IF NOT WORKED', 'FD / DR / TEMP ID', 'SITE WORKED', 'VAN REG TODAY', 'VAN CHANGED? (Y/N)',
-    'FUEL CARD USED', 'TRAINING', 'EXCEPTIONS', 'LEAD NOTES']);
+    'FUEL CARD USED', 'CARD HOLDER IF NOT THIS DRIVER', 'DOUBLE RUN? (Y/N)', '2ND ROUND / SLOT ID', 'TRAINING', 'EXCEPTIONS', 'LEAD NOTES']);
 function xcHM(t) { return t ? String(t).slice(0, 5) : ''; }
 function xcBreak(obj, keys) {
   const o = obj && typeof obj === 'object' ? obj : {};
@@ -1429,7 +1429,7 @@ function xcRow(date, depot, r, prevReg) {
     sm == null ? '' : sm, em == null ? '' : em, tm, hrs, s.delivery_drops_planned == null ? '' : s.delivery_drops_planned, dok],
     xcBreak(s.failed_delivery_breakdown, XC_DEL),
     [s.collection_stops_planned == null ? '' : s.collection_stops_planned, cok], xcBreak(s.failed_collection_breakdown, XC_COL),
-    [jobs, succ, 'Y', '', s.reported_id || '', depot, reg, changed, s.fuel_card || '', training, r.flags.join('; '), s.lead_notes || '']);
+    [jobs, succ, 'Y', '', s.reported_id || '', depot, reg, changed, s.fuel_card || '', s.fuel_card_holder || '', s.double_run_id ? 'Y' : 'N', s.double_run_id || '', training, r.flags.join('; '), s.lead_notes || '']);
 }
 function xcCsv(rows) {
   const q = v => { v = String(v == null ? '' : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
