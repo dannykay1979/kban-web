@@ -387,7 +387,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       <option>DHL Middleton</option>
       <option>DHL Runcorn</option>
     </select>
-    <select id="drv-mode" onchange="loadDriverShifts()" style="flex:1;min-width:140px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--navy);"><option value="day">Daily exceptions</option><option value="compliance">Compliance, 28 days</option><option value="perf">Performance, 7 days</option></select>
+    <select id="drv-mode" onchange="loadDriverShifts()" style="flex:1;min-width:140px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--navy);"><option value="day">Daily exceptions</option><option value="compliance">Compliance, 28 days</option><option value="perf">Performance, 7 days</option><option value="ctrl">Control sheet export</option></select>
     <button onclick="loadDriverShifts()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;">Refresh</button>
   </div>
 
@@ -1282,7 +1282,7 @@ function xBuildDay(date, depot, D, vcMap) {
     const changes = chg.filter(c => xNorm(c.driver_name) === n);
     const abs = changes.find(c => xIsAbsence(c, onRota.has(n)));
     const s = byName.get(n);
-    const row = { name: e.name, src: e.src, missing: [], flags: [], note: '', changes, shift: s, pastDue };
+    const row = { name: e.name, src: e.src, missing: [], flags: [], note: '', changes, shift: s, pastDue, rota: e.rota };
     const late = changes.find(c => c.change_type === 'Late start');
     if (late) row.note = 'Late start logged' + (late.expected_start ? ' for ' + String(late.expected_start).slice(0, 5) : '');
     if (!s) {
@@ -1384,6 +1384,100 @@ function xDayHtml(day) {
   return h + '</div>';
 }
 
+const XC_DEL = ['Business Closed', 'Access Restricted', 'Customer Unavailable', 'Address Query', 'Missing / Lost', 'Rejected by Customer', 'CFWD / Out of Time'];
+const XC_COL = ['CFWD', 'Not Ready', 'Customer Unavailable', 'Cancelled'];
+const XC_HEADERS = ['DATE', 'SITE', 'DRIVER NAME', 'ROUND / AREA NO', 'POSTCODE / AREA', 'WAVE TIME', 'ARRIVAL TIME', 'VARIANCE (MINS)', 'DEPARTURE', 'FINISH TIME',
+  'START MILEAGE', 'END MILEAGE', 'TOTAL MILEAGE', 'ON-ROAD HOURS', 'DEL. ASSIGNED', 'DEL. SUCCESSFUL']
+  .concat(XC_DEL.map(x => 'DEL FAIL: ' + x.toUpperCase()))
+  .concat(['COLL. ASSIGNED', 'COLL. SUCCESSFUL']).concat(XC_COL.map(x => 'COLL FAIL: ' + x.toUpperCase()))
+  .concat(['TOTAL JOBS', 'SUCCESS %', 'WORKED? (Y/N)', 'REASON IF NOT WORKED', 'FD / DR / TEMP ID', 'SITE WORKED', 'VAN REG TODAY', 'VAN CHANGED? (Y/N)',
+    'FUEL CARD USED', 'TRAINING', 'EXCEPTIONS', 'LEAD NOTES']);
+function xcHM(t) { return t ? String(t).slice(0, 5) : ''; }
+function xcBreak(obj, keys) {
+  const o = obj && typeof obj === 'object' ? obj : {};
+  const low = {}; Object.keys(o).forEach(k => { low[xNorm(k)] = o[k]; });
+  return keys.map(k => low[xNorm(k)] || 0);
+}
+function xcRow(date, depot, r, prevReg) {
+  const s = r.shift;
+  const rota = r.rota || null;
+  const wave = rota && rota.planned_arrival ? xcHM(rota.planned_arrival) : '';
+  const base = [xUK(date), depot, r.name];
+  if (!s) {
+    const why = r.kind === 'absent' ? r.note : (r.kind === 'noshow' ? 'NO SHOW, NOT LOGGED' : '');
+    const route = rota ? (rota.route_id || rota.temp_id || '') : '';
+    const row = base.concat([route, '', wave], new Array(XC_HEADERS.length - 6).fill(''));
+    row[XC_HEADERS.indexOf('WORKED? (Y/N)')] = 'N';
+    row[XC_HEADERS.indexOf('REASON IF NOT WORKED')] = why;
+    row[XC_HEADERS.indexOf('SITE WORKED')] = depot;
+    return row;
+  }
+  const a = xMins(s.time_at_depot), w = xMins(wave), o = xMins(s.depot_departure_time), f = xMins(s.time_at_depot_eod);
+  const sm = s.start_mileage, em = s.end_mileage;
+  const tm = (sm != null && em != null && em >= sm) ? em - sm : '';
+  const hrs = (o != null && f != null && f > o) ? Math.round((f - o) * 100 / 60) / 100 : '';
+  const dok = s.successful_delivery_drops || 0, dfl = s.failed_delivery_drops || 0;
+  const cok = s.successful_collection_stops || 0, cfl = s.failed_collections || 0;
+  const jobs = dok + dfl + cok + cfl;
+  const tot = (dok + cok) + (dfl + cfl);
+  const succ = tot ? Math.round((dok + cok) * 1000 / tot) / 10 : '';
+  const reg = s.vehicle_reg || '';
+  const changed = reg && prevReg ? (xNorm(reg) !== xNorm(prevReg) ? 'Y' : 'N') : '';
+  const training = s.day_type && s.day_type !== 'standard' ? s.day_type : '';
+  return base.concat([s.reported_id || (rota ? (rota.route_id || rota.temp_id || '') : ''), s.postcodes || '', wave, xcHM(s.time_at_depot),
+    (a != null && w != null) ? a - w : '', xcHM(s.depot_departure_time), xcHM(s.time_at_depot_eod),
+    sm == null ? '' : sm, em == null ? '' : em, tm, hrs, s.delivery_drops_planned == null ? '' : s.delivery_drops_planned, dok],
+    xcBreak(s.failed_delivery_breakdown, XC_DEL),
+    [s.collection_stops_planned == null ? '' : s.collection_stops_planned, cok], xcBreak(s.failed_collection_breakdown, XC_COL),
+    [jobs, succ, 'Y', '', s.reported_id || '', depot, reg, changed, s.fuel_card || '', training, r.flags.join('; '), s.lead_notes || '']);
+}
+function xcCsv(rows) {
+  const q = v => { v = String(v == null ? '' : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  return '﻿' + [XC_HEADERS].concat(rows).map(r => r.map(q).join(',')).join('\r\n');
+}
+function xcSunday(date) { const d = new Date(date + 'T12:00:00'); return xAddDays(date, -d.getDay()); }
+async function xcBuild(from, to, depot) {
+  const D = await xrFetch(xAddDays(from, -7), to, depot);
+  const depots = depot ? [depot] : XR_DEPOTS;
+  const out = [];
+  for (let d = from; d <= to; d = xAddDays(d, 1)) {
+    depots.forEach(dep => {
+      const day = xBuildDay(d, dep, D, null);
+      day.rows.forEach(r => {
+        const prior = D.shifts.filter(s => s.depot === dep && xNorm(s.driver_name) === xNorm(r.name) && s.shift_date < d && s.vehicle_reg)
+          .sort((x, y) => x.shift_date < y.shift_date ? 1 : -1)[0];
+        out.push(xcRow(d, dep, r, prior ? prior.vehicle_reg : ''));
+      });
+    });
+  }
+  return out;
+}
+async function xCtrl(date, depot, el) {
+  const rows = await xcBuild(date, date, depot);
+  window.__xcDate = date; window.__xcDepot = depot;
+  const H = XC_HEADERS, ix = n => H.indexOf(n);
+  let h = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
+    '<button onclick="xCtrlDownload(\'day\')" style="padding:9px 14px;background:var(--navy);color:#fff;border:0;border-radius:8px;font-size:13px;font-weight:700;">Download day CSV</button>' +
+    '<button onclick="xCtrlDownload(\'week\')" style="padding:9px 14px;background:var(--white);color:var(--navy);border:1px solid var(--navy);border-radius:8px;font-size:13px;font-weight:700;">Download week CSV (Sun to Sat)</button></div>' +
+    '<p style="font-size:12px;color:var(--muted);margin-bottom:8px;">Control sheet layout, one row per expected or checked-in driver. Pay, rates, top-ups, person ID and pay basis stay with payroll. The CSV has every column.</p>';
+  if (!rows.length) return void (el.innerHTML = h + '<p style="color:var(--muted);font-size:13px;">No drivers expected or checked in.</p>');
+  const cols = ['SITE', 'DRIVER NAME', 'WORKED? (Y/N)', 'FD / DR / TEMP ID', 'ARRIVAL TIME', 'DEPARTURE', 'FINISH TIME', 'TOTAL MILEAGE', 'ON-ROAD HOURS', 'DEL. SUCCESSFUL', 'SUCCESS %', 'VAN REG TODAY', 'FUEL CARD USED', 'TRAINING', 'REASON IF NOT WORKED'];
+  h += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;background:var(--white);border:1px solid var(--border);"><tr style="background:var(--navy);color:#fff;">' +
+    cols.map(c => '<th style="padding:6px;">' + xEsc(c) + '</th>').join('') + '</tr>';
+  rows.forEach(r => { h += '<tr style="border-top:1px solid var(--border);">' + cols.map(c => '<td style="padding:6px;text-align:center;">' + xEsc(r[ix(c)]) + '</td>').join('') + '</tr>'; });
+  el.innerHTML = h + '</table></div>';
+}
+async function xCtrlDownload(scope) {
+  const date = window.__xcDate || document.getElementById('drv-date').value, depot = window.__xcDepot || '';
+  const from = scope === 'week' ? xcSunday(date) : date, to = scope === 'week' ? xAddDays(xcSunday(date), 6) : date;
+  const rows = await xcBuild(from, to, depot);
+  const blob = new Blob([xcCsv(rows)], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'KBAN_control_sheet_' + (depot ? depot.replace(/\s+/g, '_') + '_' : 'all_depots_') + from + (scope === 'week' ? '_to_' + to : '') + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
 async function loadDriverShifts() {
   const date = document.getElementById('drv-date').value;
   const depot = document.getElementById('drv-depot').value;
@@ -1394,6 +1488,7 @@ async function loadDriverShifts() {
   try {
     if (mode === 'compliance') return await xCompliance(date, depot, el);
     if (mode === 'perf') return await xPerf(date, depot, el);
+    if (mode === 'ctrl') return await xCtrl(date, depot, el);
     const D = await xrFetch(date, date, depot);
     const ids = D.shifts.map(s => s.vehicle_check_id).filter(Boolean);
     const vcMap = {};
