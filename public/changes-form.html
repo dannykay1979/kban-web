@@ -50,6 +50,7 @@
       <option>Late start</option>
       <option>Extra driver (not on rota)</option>
       <option>Route or van swap</option>
+      <option>Fuel card swap</option>
       <option>Other</option>
     </select>
 
@@ -67,6 +68,11 @@
     <div id="w-route" class="hide">
       <label for="route">New route or temp ID</label>
       <input type="text" id="route" placeholder="e.g. RC Temp 2">
+    </div>
+
+    <div id="w-card" class="hide">
+      <label for="card">New fuel card (KBAN number)</label>
+      <input type="text" id="card" placeholder="e.g. KBAN 21" autocapitalize="characters">
     </div>
 
     <label for="notes">Notes <span id="notes-req" class="hide">(required)</span></label>
@@ -138,6 +144,7 @@ function onType() {
   $('w-time').classList.toggle('hide', !(t === 'Late start' || t.indexOf('Extra') === 0));
   $('w-cover').classList.toggle('hide', t.indexOf('Extra') !== 0);
   $('w-route').classList.toggle('hide', !(t === 'Route or van swap' || t.indexOf('Extra') === 0));
+  $('w-card').classList.toggle('hide', t !== 'Fuel card swap');
   $('notes-req').classList.toggle('hide', !(t === 'Other' || t === 'Route or van swap' || t === 'Day off swap'));
 }
 async function loadList() {
@@ -150,6 +157,7 @@ async function loadList() {
       '<div class="row"><span class="tag">' + esc(r.change_type) + '</span><b>' + esc(r.driver_name) + '</b>' +
       (r.replacement_for ? '<br>Covering ' + esc(r.replacement_for) : '') +
       (r.new_route_id ? '<br>Route ' + esc(r.new_route_id) : '') +
+      (r.new_fuel_card ? '<br>Fuel card ' + esc(r.new_fuel_card) : '') +
       (r.expected_start ? '<br>Start ' + esc(String(r.expected_start).slice(0, 5)) : '') +
       (r.notes ? '<br>' + esc(r.notes) : '') +
       '<br><span class="hint">Logged by ' + esc(r.logged_by) + '</span></div>').join('')
@@ -158,7 +166,7 @@ async function loadList() {
 }
 async function save() {
   const v = { depot: $('depot').value, date: $('date').value, type: $('type').value, driver: $('driver').value,
-    time: $('time').value, cover: $('cover').value, route: $('route').value.trim(), notes: $('notes').value.trim(), by: $('by').value.trim() };
+    time: $('time').value, cover: $('cover').value, route: $('route').value.trim(), card: (function (x) { x = x.trim().toUpperCase().replace(/\s+/g, ' '); return /^\d+$/.test(x) ? 'KBAN ' + x : x; })($('card').value), notes: $('notes').value.trim(), by: $('by').value.trim() };
   if (!v.depot) return show('err', 'Select the depot.');
   if (!v.date) return show('err', 'Select the date.');
   if (!v.type) return show('err', 'Select what happened.');
@@ -166,17 +174,18 @@ async function save() {
   if (v.type.indexOf('Extra') === 0 && !v.time) return show('err', 'Enter the expected start time.');
   if (v.type === 'Late start' && !v.time) return show('err', 'Enter the expected start time.');
   if ((v.type.indexOf('Extra') === 0 || v.type === 'Route or van swap') && !v.route) return show('err', 'Enter the route or temp ID.');
+  if (v.type === 'Fuel card swap' && !v.card) return show('err', 'Enter the new fuel card number.');
   if ((v.type === 'Other' || v.type === 'Route or van swap' || v.type === 'Day off swap') && v.notes.length < 5) return show('err', 'Add a short note explaining the change.');
   if (v.by.length < 2) return show('err', 'Enter your name.');
   $('go').disabled = true;
   try {
     await sb('daily_changes', { method: 'POST', body: JSON.stringify({
       change_date: v.date, depot: v.depot, driver_name: v.driver, change_type: v.type,
-      replacement_for: v.cover || null, new_route_id: v.route || null, expected_start: v.time || null,
+      replacement_for: v.cover || null, new_route_id: v.route || null, new_fuel_card: v.card || null, expected_start: v.time || null,
       notes: v.notes || null, logged_by: v.by }) });
     try { localStorage.setItem('kban_changes_by', v.by); } catch (e) {}
     show('ok', 'Saved: ' + v.type + ', ' + v.driver + '.');
-    $('type').value = ''; $('driver').value = ''; $('time').value = ''; $('cover').value = ''; $('route').value = ''; $('notes').value = '';
+    $('type').value = ''; $('driver').value = ''; $('time').value = ''; $('cover').value = ''; $('route').value = ''; $('card').value = ''; $('notes').value = '';
     onType(); loadList();
   } catch (e) { show('err', 'Not saved. Check your signal and try again.'); }
   $('go').disabled = false;
