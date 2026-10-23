@@ -188,7 +188,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   <button class="tab-btn" onclick="switchTab('plan')" id="tab-plan">Weekly Plan</button>
   <button class="tab-btn" onclick="switchTab('rota')" id="tab-rota">Rota</button>
   <button class="tab-btn" onclick="switchTab('history')" id="tab-history">History</button>
-  <button class="tab-btn" onclick="switchTab('drivers')" id="tab-drivers">Drivers</button>
+  <button class="tab-btn" onclick="switchTab('drivers')" id="tab-drivers">Exceptions</button>
   <button class="tab-btn" onclick="switchTab('mgmt')" id="tab-mgmt">Mgmt</button>
   <button class="tab-btn" onclick="switchTab('mi')" id="tab-mi">Daily MI</button>
   <button class="tab-btn" onclick="switchTab('weekly-mi')" id="tab-weekly-mi">Weekly MI</button>
@@ -387,6 +387,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       <option>DHL Middleton</option>
       <option>DHL Runcorn</option>
     </select>
+    <select id="drv-mode" onchange="loadDriverShifts()" style="flex:1;min-width:140px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--navy);"><option value="day">Daily exceptions</option><option value="compliance">Compliance, 28 days</option></select>
     <button onclick="loadDriverShifts()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;">Refresh</button>
   </div>
 
@@ -1217,196 +1218,226 @@ function showErr(msg) {
 
 // ── DRIVERS TAB ───────────────────────────────────────────────────────────
 
+// ── EXCEPTION REPORT (replaces the old lead sign-off cards) ───────────────
+const XR_DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const XR_DEPOTS = ['DPD Aberdeen','DPD Edinburgh','DHL Middleton','DHL Runcorn'];
+const XR_FLAG_TEXT = {
+  late_departure_entry: 'Departure time entered late',
+  start_mileage_mismatch: 'Start mileage does not match last end mileage',
+  high_mileage: 'High mileage',
+  low_mileage: 'Very low mileage'
+};
+function xEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function xNorm(s) { return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+function xLocal(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function xAddDays(ds, n) { const d = new Date(ds + 'T12:00:00'); d.setDate(d.getDate() + n); return xLocal(d); }
+function xMonday(ds) { const d = new Date(ds + 'T12:00:00'); return xAddDays(ds, -((d.getDay() + 6) % 7)); }
+function xDayName(ds) { return XR_DAYS[new Date(ds + 'T12:00:00').getDay()]; }
+function xUK(ds) { return ds.split('-').reverse().join('/'); }
+function xIsAbsence(c, onRota) {
+  return c.change_type === 'Sick' || c.change_type === 'No show' || c.change_type === 'Annual leave' ||
+    (c.change_type === 'Day off swap' && onRota);
+}
+
 function initDrivers() {
   const d = document.getElementById('drv-date');
-  if (!d.value) d.value = today.toISOString().split('T')[0];
+  if (!d.value) d.value = xLocal(new Date());
   loadDriverShifts();
 }
 
-async function loadDriverShifts() {
-  const date  = document.getElementById('drv-date').value;
-  const depot = document.getElementById('drv-depot').value;
-  const el    = document.getElementById('drv-results');
-  if (!date) return;
-
-  el.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0;">Loading...</p>';
-
-  try {
-    let q = `driver_shifts?shift_date=eq.${date}&order=depot.asc,driver_name.asc&select=*`;
-    if (depot) q += `&depot=eq.${encodeURIComponent(depot)}`;
-    const shifts = await sbFetch(q);
-
-    if (!shifts || shifts.length === 0) {
-      el.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0;">No driver check-ins for this date.</p>';
-      return;
-    }
-
-    // Group by depot
-    const byDepot = {};
-    shifts.forEach(s => {
-      if (!byDepot[s.depot]) byDepot[s.depot] = [];
-      byDepot[s.depot].push(s);
-    });
-
-    el.innerHTML = Object.entries(byDepot).map(([dep, list]) => `
-      <div style="margin-bottom:20px;">
-        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;">${dep}</div>
-        ${list.map(s => renderDriverCard(s)).join('')}
-      </div>
-    `).join('');
-  } catch(e) {
-    el.innerHTML = '<p style="color:#991b1b;font-size:13px;text-align:center;padding:32px 0;">Error: ' + e.message + '</p>';
-  }
+async function xrFetch(from, to, depot) {
+  const dq = depot ? '&depot=eq.' + encodeURIComponent(depot) : '';
+  const mondays = [];
+  for (let m = xMonday(from); m <= to; m = xAddDays(m, 7)) mondays.push(m);
+  const [shifts, plans, changes] = await Promise.all([
+    sbFetch('driver_shifts?shift_date=gte.' + from + '&shift_date=lte.' + to + dq + '&select=*&order=shift_date.asc'),
+    sbFetch('depot_weekly_plan?week_start=in.(' + mondays.join(',') + ')' + dq + '&select=depot,week_start,drivers,updated_at&order=updated_at.desc'),
+    sbFetch('daily_changes?change_date=gte.' + from + '&change_date=lte.' + to + dq + '&select=*&order=created_at.asc')
+  ]);
+  return { shifts: shifts || [], plans: plans || [], changes: changes || [] };
 }
 
-function renderDriverCard(s) {
-  const statusColour = {
-    pending:        ['#6b7280','#f3f4f6'],
-    sod_complete:   ['#1d4ed8','#dbeafe'],
-    eod_complete:   ['#d97706','#fef3c7'],
-    lead_confirmed: ['#16a34a','#dcfce7'],
-  }[s.status] || ['#6b7280','#f3f4f6'];
-
-  const statusLabel = {
-    pending:        'Pending',
-    sod_complete:   'Out on round',
-    eod_complete:   'EOD submitted',
-    lead_confirmed: 'Confirmed',
-  }[s.status] || s.status;
-
-  const badge = `<span style="background:${statusColour[1]};color:${statusColour[0]};border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;">${statusLabel}</span>`;
-
-  const fmt = v => v ? v.slice(0,5) : '--';
-  const fmtDate = d => d ? new Date(d).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '--';
-
-  let body = '';
-
-  // SOD summary (shown for all statuses after pending)
-  if (s.status !== 'pending') {
-    body += `
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;font-size:12px;">
-        <div><div style="color:var(--muted);font-size:10px;text-transform:uppercase;font-weight:700;">At Depot</div><div style="font-weight:600;">${fmt(s.time_at_depot)}</div></div>
-        <div><div style="color:var(--muted);font-size:10px;text-transform:uppercase;font-weight:700;">Drops</div><div style="font-weight:600;">${s.delivery_drops_planned || '--'}</div></div>
-        <div><div style="color:var(--muted);font-size:10px;text-transform:uppercase;font-weight:700;">Parcels</div><div style="font-weight:600;">${s.parcel_count || '--'}</div></div>
-      </div>`;
-
-    if (s.day_type !== 'standard') {
-      body += `<div style="background:var(--abg);border-radius:7px;padding:7px 10px;font-size:12px;color:#92400e;margin-bottom:10px;">Training day: ${s.day_type.replace(/_/g,' ')}</div>`;
-    }
-
-    // Departure time row
-    const depSet = s.depot_departure_time;
-    body += `
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-        <div style="font-size:12px;color:var(--muted);flex-shrink:0;">Departure:</div>
-        ${depSet
-          ? `<span style="font-weight:700;font-size:13px;">${fmt(depSet)}</span><span style="font-size:11px;color:var(--muted);margin-left:4px;">set by ${s.departure_set_by||'lead'}</span>`
-          : `<input type="time" id="dep-time-${s.id}" style="width:110px;padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;">
-             <button onclick="setDeparture('${s.id}')" style="background:var(--blue);color:#fff;border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">Set</button>`
-        }
-      </div>`;
-  }
-
-  // EOD summary + sign-off (shown when eod_complete or lead_confirmed)
-  if (s.status === 'eod_complete' || s.status === 'lead_confirmed') {
-    const variance = (s.successful_delivery_drops || 0) - (s.delivery_drops_planned || 0);
-    const varColour = variance < 0 ? 'var(--red)' : variance > 0 ? 'var(--green)' : 'var(--muted)';
-    body += `
-      <div style="background:var(--bg);border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;">
-          <div><div style="color:var(--muted);font-size:10px;text-transform:uppercase;font-weight:700;">Success</div><div style="font-weight:700;">${s.successful_delivery_drops ?? '--'}</div></div>
-          <div><div style="color:var(--muted);font-size:10px;text-transform:uppercase;font-weight:700;">Failed</div><div style="font-weight:700;color:${s.failed_delivery_drops > 0 ? 'var(--red)' : 'inherit'}">${s.failed_delivery_drops ?? '--'}</div></div>
-          <div><div style="color:var(--muted);font-size:10px;text-transform:uppercase;font-weight:700;">Variance</div><div style="font-weight:700;color:${varColour}">${variance > 0 ? '+' : ''}${variance}</div></div>
-          <div><div style="color:var(--muted);font-size:10px;text-transform:uppercase;font-weight:700;">Miles</div><div style="font-weight:700;">${s.end_mileage && s.start_mileage ? s.end_mileage - s.start_mileage : '--'}</div></div>
-        </div>
-        ${s.failed_delivery_reason ? `<div style="margin-top:8px;color:var(--muted);">Failed reason: ${s.failed_delivery_reason}</div>` : ''}
-        ${s.client === 'DHL' ? `<div style="margin-top:6px;color:var(--muted);">Collections: ${s.successful_collection_stops||0} stops, ${s.parcels_collected||0} items</div>` : ''}
-        <div style="margin-top:6px;color:var(--muted);">Last delivery: ${fmt(s.time_last_delivery)} &nbsp;·&nbsp; Back at depot: ${fmt(s.time_at_depot_eod)}</div>
-      </div>`;
-
-    if (s.status === 'eod_complete') {
-      const idLabel = s.reported_id ? `Route/Temp ID <strong>${s.reported_id}</strong> is correct` : 'ID has been checked and verified';
-      body += `
-        <div style="margin-bottom:8px;">
-          <textarea id="lead-notes-${s.id}" placeholder="Lead notes (optional)" rows="2" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:none;"></textarea>
-        </div>
-        <label style="display:flex;align-items:center;gap:8px;padding:8px 0;font-size:13px;font-weight:600;color:var(--navy);cursor:pointer;margin-bottom:8px;">
-          <input type="checkbox" id="id-confirm-${s.id}" style="width:18px;height:18px;cursor:pointer;accent-color:var(--green);">
-          I confirm ${idLabel}
-        </label>
-        <button onclick="confirmShift('${s.id}')" style="width:100%;background:var(--green);color:#fff;border:none;border-radius:9px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;">Confirm &amp; Sign Off</button>`;
+function xBuildDay(date, depot, D, vcMap) {
+  const wk = xMonday(date), dn = xDayName(date);
+  const plan = D.plans.find(p => p.depot === depot && p.week_start === wk);
+  const chg = D.changes.filter(c => c.depot === depot && c.change_date === date);
+  const shifts = D.shifts.filter(s => s.depot === depot && s.shift_date === date);
+  const byName = new Map();
+  shifts.forEach(s => byName.set(xNorm(s.driver_name), s));
+  const expected = new Map();
+  if (plan) (plan.drivers || []).forEach(e => {
+    if ((e.operating_days || []).indexOf(dn) >= 0) expected.set(xNorm(e.name), { name: e.name, src: 'Rota' });
+  });
+  const onRota = new Set(expected.keys());
+  chg.forEach(c => {
+    const n = xNorm(c.driver_name);
+    const added = c.change_type.indexOf('Extra') === 0 || (c.change_type === 'Day off swap' && !onRota.has(n));
+    if (added && !expected.has(n)) expected.set(n, { name: c.driver_name, src: 'Added' });
+  });
+  const pastDue = date < xLocal(new Date()) || new Date().getHours() >= 19;
+  const rows = [];
+  const seen = new Set();
+  expected.forEach((e, n) => {
+    seen.add(n);
+    const changes = chg.filter(c => xNorm(c.driver_name) === n);
+    const abs = changes.find(c => xIsAbsence(c, onRota.has(n)));
+    const s = byName.get(n);
+    const row = { name: e.name, src: e.src, missing: [], flags: [], note: '', changes, shift: s, pastDue };
+    const late = changes.find(c => c.change_type === 'Late start');
+    if (late) row.note = 'Late start logged' + (late.expected_start ? ' for ' + String(late.expected_start).slice(0, 5) : '');
+    if (!s) {
+      if (abs) { row.kind = 'absent'; row.note = abs.change_type + (abs.notes ? ': ' + abs.notes : ''); }
+      else row.kind = 'noshow';
     } else {
-      body += `<div style="font-size:12px;color:var(--green);font-weight:600;">✓ Confirmed by ${s.lead_confirmed_by || 'lead'} at ${fmtDate(s.lead_confirmed_at)}</div>`;
-      if (s.lead_notes) body += `<div style="font-size:12px;color:var(--muted);margin-top:4px;">Notes: ${s.lead_notes}</div>`;
+      xCheckShift(row, s, vcMap);
+      if (abs) row.flags.push('Logged as ' + abs.change_type + ' but checked in');
     }
-  }
-
-  return `
-    <div style="background:var(--white);border-radius:10px;box-shadow:var(--sh);margin-bottom:10px;overflow:hidden;" id="dcard-${s.id}">
-      <div style="background:var(--navy);padding:10px 13px;display:flex;justify-content:space-between;align-items:center;">
-        <div>
-          <div style="color:#fff;font-weight:700;font-size:14px;">${s.driver_name}</div>
-          <div style="color:rgba(255,255,255,.5);font-size:11px;">${s.reported_id ? 'Today: ' + s.reported_id : (s.driver_id || 'No ID recorded')}</div>
-        </div>
-        ${badge}
-      </div>
-      <div style="padding:13px;">${body || '<p style="color:var(--muted);font-size:13px;">Driver has not checked in yet.</p>'}</div>
-    </div>`;
+    rows.push(row);
+  });
+  shifts.forEach(s => {
+    const n = xNorm(s.driver_name);
+    if (seen.has(n)) return;
+    const row = { name: s.driver_name, src: 'Unplanned', missing: [], flags: [], note: '', changes: [], shift: s, pastDue };
+    xCheckShift(row, s, vcMap);
+    if (plan) { row.kind = row.kind === 'ok' ? 'unplanned' : row.kind; row.flags.unshift('Not on the rota and no change logged'); }
+    rows.push(row);
+  });
+  return { depot, date, hasPlan: !!plan, week: wk, rows };
 }
 
-async function setDeparture(shiftId) {
-  const timeEl = document.getElementById('dep-time-' + shiftId);
-  const time = timeEl ? timeEl.value : '';
-  if (!time) { alert('Please enter a departure time.'); return; }
+function xCheckShift(row, s, vcMap) {
+  const training = s.day_type && s.day_type !== 'standard';
+  const sod = !!s.sod_submitted_at || s.status === 'sod_complete' || s.status === 'eod_complete' || s.status === 'lead_confirmed';
+  const vc = training || !!s.vehicle_check_id;
+  const dep = training || !!s.depot_departure_time;
+  const eod = !!s.eod_submitted_at || s.status === 'eod_complete' || s.status === 'lead_confirmed';
+  row.steps = { vc, sod, dep, eod };
+  if (!vc) row.missing.push('Vehicle check');
+  if (!sod) row.missing.push('Start of day');
+  if (!dep) row.missing.push('Departure time');
+  if (!eod) row.missing.push('End of day');
+  if ((s.failed_pre10 || 0) > 0) row.flags.push('Pre-10 failed: ' + s.failed_pre10 + (s.failed_pre10_reason ? ' (' + s.failed_pre10_reason + ')' : ''));
+  if ((s.failed_pre12 || 0) > 0) row.flags.push('Pre-12 failed: ' + s.failed_pre12 + (s.failed_pre12_reason ? ' (' + s.failed_pre12_reason + ')' : ''));
+  if ((s.collections_late || 0) > 0) row.flags.push('Collections outside window: ' + s.collections_late + (s.collections_late_reason ? ' (' + s.collections_late_reason + ')' : ''));
+  (Array.isArray(s.data_flags) ? s.data_flags : []).forEach(f => row.flags.push(XR_FLAG_TEXT[f] || f));
+  const v = vcMap && s.vehicle_check_id ? vcMap[s.vehicle_check_id] : null;
+  if (v && v.has_defects) row.flags.push('Vehicle defects reported' + (v.defect_notes ? ': ' + v.defect_notes : ''));
+  row.kind = row.missing.length ? 'incomplete' : 'ok';
+}
 
-  const { data:{ session } } = await _sb.auth.getSession();
-  const setBy = session?.user?.email || 'lead';
+function xChip(text, bg, fg) {
+  return '<span style="display:inline-block;background:' + bg + ';color:' + fg + ';border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;margin-right:6px;">' + xEsc(text) + '</span>';
+}
+function xTile(label, value, bad) {
+  return '<div style="flex:1;min-width:84px;background:var(--white);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center;">' +
+    '<div style="font-size:22px;font-weight:700;color:' + (bad ? 'var(--red)' : 'var(--navy)') + ';">' + value + '</div>' +
+    '<div style="font-size:11px;color:var(--muted);">' + label + '</div></div>';
+}
 
+function xRowHtml(r) {
+  let chip, tone;
+  if (r.kind === 'noshow') { chip = xChip('NO SHOW, NOT EXPLAINED', 'var(--rbg)', 'var(--red)'); tone = 'var(--red)'; }
+  else if (r.kind === 'absent') { chip = xChip('ABSENT, LOGGED', 'var(--abg)', '#92400e'); tone = 'var(--amber)'; }
+  else if (r.kind === 'unplanned') { chip = xChip('NOT ON ROTA', 'var(--abg)', '#92400e'); tone = 'var(--amber)'; }
+  else if (r.kind === 'incomplete') {
+    chip = r.pastDue ? xChip('INCOMPLETE', 'var(--rbg)', 'var(--red)') : xChip('IN PROGRESS', 'var(--abg)', '#92400e');
+    tone = r.pastDue ? 'var(--red)' : 'var(--amber)';
+  } else { chip = xChip(r.flags.length ? 'COMPLETE, FLAGS' : 'COMPLETE', r.flags.length ? 'var(--abg)' : 'var(--gbg)', r.flags.length ? '#92400e' : 'var(--green)'); tone = r.flags.length ? 'var(--amber)' : 'var(--green)'; }
+  let h = '<div style="background:var(--white);border:1px solid var(--border);border-left:4px solid ' + tone + ';border-radius:8px;padding:10px 12px;margin-bottom:8px;">' +
+    '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;"><strong style="color:var(--navy);">' + xEsc(r.name) + '</strong><span>' + chip + '</span></div>';
+  if (r.src === 'Added') h += '<div style="font-size:12px;color:var(--muted);">Added by lead on the day</div>';
+  if (r.note) h += '<div style="font-size:12px;color:var(--muted);">' + xEsc(r.note) + '</div>';
+  if (r.missing.length) h += '<div style="font-size:12px;margin-top:4px;color:' + (r.pastDue ? 'var(--red)' : '#92400e') + ';">Outstanding: ' + r.missing.map(xEsc).join(', ') + '</div>';
+  r.flags.forEach(f => { h += '<div style="font-size:12px;margin-top:3px;color:#92400e;">&#9888; ' + xEsc(f) + '</div>'; });
+  return h + '</div>';
+}
+
+function xDayHtml(day) {
+  const rank = { noshow: 0, incomplete: 1, unplanned: 2, absent: 3, ok: 4 };
+  const rows = day.rows.slice().sort((a, b) => (rank[a.kind] - rank[b.kind]) || ((b.flags.length) - (a.flags.length)));
+  const ok = rows.filter(r => r.kind === 'ok' && !r.flags.length);
+  const show = rows.filter(r => !(r.kind === 'ok' && !r.flags.length));
+  let h = '<div style="margin-bottom:22px;"><h3 style="font-size:15px;color:var(--navy);margin-bottom:8px;">' + xEsc(day.depot) + '</h3>';
+  if (!day.hasPlan) h += '<div style="background:var(--rbg);color:var(--red);border-radius:8px;padding:10px 12px;font-size:13px;font-weight:600;margin-bottom:8px;">No rota loaded for week commencing ' + xUK(day.week) + '. Expected drivers cannot be checked.</div>';
+  if (!rows.length) h += '<p style="font-size:13px;color:var(--muted);">No drivers expected or checked in.</p>';
+  show.forEach(r => { h += xRowHtml(r); });
+  if (ok.length) h += '<div style="font-size:12px;color:var(--green);padding:4px 2px;">&#10003; Complete, no flags (' + ok.length + '): ' + ok.map(r => xEsc(r.name)).join(', ') + '</div>';
+  return h + '</div>';
+}
+
+async function loadDriverShifts() {
+  const date = document.getElementById('drv-date').value;
+  const depot = document.getElementById('drv-depot').value;
+  const mode = (document.getElementById('drv-mode') || {}).value || 'day';
+  const el = document.getElementById('drv-results');
+  if (!date) return;
+  el.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0;">Loading...</p>';
   try {
-    await sbFetch(`driver_shifts?id=eq.${shiftId}`, {
-      method: 'PATCH',
-      prefer: 'return=minimal',
-      body: JSON.stringify({
-        depot_departure_time: time,
-        departure_set_by: setBy,
-        departure_set_at: new Date().toISOString(),
-      }),
-    });
-    loadDriverShifts();
-  } catch(e) {
-    alert('Failed to save: ' + e.message);
+    if (mode === 'compliance') return await xCompliance(date, depot, el);
+    const D = await xrFetch(date, date, depot);
+    const ids = D.shifts.map(s => s.vehicle_check_id).filter(Boolean);
+    const vcMap = {};
+    if (ids.length) (await sbFetch('vehicle_checks?id=in.(' + ids.join(',') + ')&select=id,has_defects,defect_notes') || []).forEach(v => { vcMap[v.id] = v; });
+    const depots = depot ? [depot] : XR_DEPOTS;
+    const days = depots.map(d => xBuildDay(date, d, D, vcMap));
+    const all = days.flatMap(d => d.rows);
+    const count = k => all.filter(r => r.kind === k).length;
+    const flagged = all.filter(r => r.flags.length).length;
+    let h = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">' +
+      xTile('Expected / on road', all.length, false) +
+      xTile('Complete', all.filter(r => r.kind === 'ok').length, false) +
+      xTile('Outstanding', count('incomplete'), count('incomplete') > 0) +
+      xTile('Unexplained no shows', count('noshow'), count('noshow') > 0) +
+      xTile('With flags', flagged, false) + '</div>';
+    days.forEach(d => { h += xDayHtml(d); });
+    el.innerHTML = h;
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--red);font-size:13px;text-align:center;padding:32px 0;">Could not load report: ' + xEsc(e.message) + '</p>';
   }
 }
 
-async function confirmShift(shiftId) {
-  const idCheckEl = document.getElementById('id-confirm-' + shiftId);
-  if (idCheckEl && !idCheckEl.checked) {
-    alert("Please confirm the driver's Route/Temp ID before signing off.");
-    return;
-  }
-  const notes = (document.getElementById('lead-notes-' + shiftId)?.value || '').trim();
-  const { data:{ session } } = await _sb.auth.getSession();
-  const confirmedBy = session?.user?.email || 'lead';
-
-  try {
-    await sbFetch(`driver_shifts?id=eq.${shiftId}`, {
-      method: 'PATCH',
-      prefer: 'return=minimal',
-      body: JSON.stringify({
-        status: 'lead_confirmed',
-        lead_confirmed_by: confirmedBy,
-        lead_confirmed_at: new Date().toISOString(),
-        lead_notes: notes || null,
-        id_confirmed: !!(idCheckEl?.checked),
-      }),
+async function xCompliance(to, depot, el) {
+  const from = xAddDays(to, -27);
+  const D = await xrFetch(from, to, depot);
+  const depots = depot ? [depot] : XR_DEPOTS;
+  const stats = {};
+  for (let d = from; d <= to; d = xAddDays(d, 1)) {
+    depots.forEach(dep => {
+      const day = xBuildDay(d, dep, D, null);
+      day.rows.forEach(r => {
+        const k = dep + '|' + xNorm(r.name);
+        const st = stats[k] = stats[k] || { name: r.name, depot: dep, expected: 0, worked: 0, complete: 0, vc: 0, dp: 0, eod: 0, noshow: 0, flags: 0 };
+        if (r.src !== 'Unplanned') st.expected++;
+        if (r.kind === 'noshow') st.noshow++;
+        if (r.shift) {
+          st.worked++;
+          if (r.steps.vc) st.vc++;
+          if (r.steps.dep) st.dp++;
+          if (r.steps.eod) st.eod++;
+          if (!r.missing.length) st.complete++;
+          if (r.flags.some(f => f !== 'Not on the rota and no change logged')) st.flags++;
+        }
+      });
     });
-    loadDriverShifts();
-  } catch(e) {
-    alert('Failed to save: ' + e.message);
   }
+  const list = Object.values(stats);
+  const pct = (a, b) => b ? Math.round(a * 100 / b) : null;
+  const cell = p => p == null ? '<td style="text-align:center;color:var(--muted);">-</td>' :
+    '<td style="text-align:center;font-weight:700;color:' + (p >= 95 ? 'var(--green)' : p >= 80 ? 'var(--amber)' : 'var(--red)') + ';">' + p + '%</td>';
+  list.forEach(s => { s.pc = pct(s.complete, s.worked); });
+  list.sort((a, b) => ((a.pc == null ? 101 : a.pc) - (b.pc == null ? 101 : b.pc)) || (b.noshow - a.noshow));
+  if (!list.length) { el.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0;">No data for this period.</p>'; return; }
+  let h = '<p style="font-size:12px;color:var(--muted);margin-bottom:8px;">28 days to ' + xUK(to) + '. Worst compliance first. Percentages are of days worked. Unexplained no shows are counted against the rota, so they only appear where a rota was loaded.</p>' +
+    '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;background:var(--white);border:1px solid var(--border);">' +
+    '<tr style="background:var(--navy);color:#fff;"><th style="text-align:left;padding:8px;">Driver</th><th>Worked</th><th>Fully complete</th><th>Vehicle check</th><th>Departure</th><th>End of day</th><th>No shows</th><th>Flags</th></tr>';
+  list.forEach(s => {
+    h += '<tr style="border-top:1px solid var(--border);"><td style="padding:8px;"><strong>' + xEsc(s.name) + '</strong><br><span style="color:var(--muted);">' + xEsc(s.depot) + '</span></td>' +
+      '<td style="text-align:center;">' + s.worked + '</td>' + cell(s.pc) + cell(pct(s.vc, s.worked)) + cell(pct(s.dp, s.worked)) + cell(pct(s.eod, s.worked)) +
+      '<td style="text-align:center;font-weight:700;color:' + (s.noshow ? 'var(--red)' : 'var(--muted)') + ';">' + s.noshow + '</td>' +
+      '<td style="text-align:center;">' + s.flags + '</td></tr>';
+  });
+  el.innerHTML = h + '</table></div>';
 }
-
-// ── MGMT TAB ──────────────────────────────────────────────────────────────
 
 async function sbFetchAuth(path, opts={}) {
   const { data:{ session } } = await _sb.auth.getSession();
