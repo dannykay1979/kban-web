@@ -1331,7 +1331,8 @@ function xCheckShift(row, s, vcMap, rota, changes) {
     const expRoute = swap ? swap.new_route_id : (rota && (rota.route_id || rota.temp_id));
     if (expRoute && s.reported_id && nid(expRoute) !== nid(s.reported_id)) row.flags.push('Route ID ' + s.reported_id + ' differs from rota (' + expRoute + ')');
     const fc = x => { const v = String(x || '').toUpperCase().replace(/\s+/g, ' ').trim(); return /^\d+$/.test(v) ? 'KBAN ' + v : v; };
-    const rc = rota && fc(rota.fuel_card);
+    const cswap = (changes || []).filter(c => c.new_fuel_card).pop();
+    const rc = cswap ? fc(cswap.new_fuel_card) : (rota && fc(rota.fuel_card));
     if (rc && s.fuel_card && fc(s.fuel_card) !== rc) row.flags.push(s.fuel_card === 'NONE' ? 'No fuel card today (rota has ' + rc + ')' : 'Fuel card ' + fc(s.fuel_card) + ' differs from rota (' + rc + ')');
   }
   row.kind = row.missing.length ? 'incomplete' : 'ok';
