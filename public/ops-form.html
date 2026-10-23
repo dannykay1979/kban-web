@@ -387,7 +387,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       <option>DHL Middleton</option>
       <option>DHL Runcorn</option>
     </select>
-    <select id="drv-mode" onchange="loadDriverShifts()" style="flex:1;min-width:140px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--navy);"><option value="day">Daily exceptions</option><option value="compliance">Compliance, 28 days</option></select>
+    <select id="drv-mode" onchange="loadDriverShifts()" style="flex:1;min-width:140px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--navy);"><option value="day">Daily exceptions</option><option value="compliance">Compliance, 28 days</option><option value="perf">Performance, 7 days</option></select>
     <button onclick="loadDriverShifts()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;">Refresh</button>
   </div>
 
@@ -1393,6 +1393,7 @@ async function loadDriverShifts() {
   el.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0;">Loading...</p>';
   try {
     if (mode === 'compliance') return await xCompliance(date, depot, el);
+    if (mode === 'perf') return await xPerf(date, depot, el);
     const D = await xrFetch(date, date, depot);
     const ids = D.shifts.map(s => s.vehicle_check_id).filter(Boolean);
     const vcMap = {};
@@ -1413,6 +1414,53 @@ async function loadDriverShifts() {
   } catch (e) {
     el.innerHTML = '<p style="color:var(--red);font-size:13px;text-align:center;padding:32px 0;">Could not load report: ' + xEsc(e.message) + '</p>';
   }
+}
+
+function xMins(t) { if (!t) return null; const p = String(t).split(':'); const v = parseInt(p[0], 10) * 60 + parseInt(p[1], 10); return isNaN(v) ? null : v; }
+function xPerfAgg(rows) {
+  const agg = {};
+  rows.forEach(s => {
+    if (s.day_type && s.day_type !== 'standard') return;
+    const k = s.depot + '|' + xNorm(s.driver_name);
+    const a = agg[k] = agg[k] || { name: s.driver_name, depot: s.depot, days: 0, mins: 0, minDays: 0, miles: 0, okT: 0, ok: 0, fail: 0, parcels: 0, parcelDrops: 0 };
+    a.days++;
+    const o = xMins(s.depot_departure_time), i = xMins(s.time_at_depot_eod);
+    const timed = o != null && i != null && i > o;
+    if (timed) { a.mins += i - o; a.minDays++; }
+    const m = (s.end_mileage || 0) - (s.start_mileage || 0);
+    if (m > 0 && m < 1000) a.miles += m;
+    const ok = s.successful_delivery_drops || 0, fl = s.failed_delivery_drops || 0;
+    a.ok += ok; a.fail += fl;
+    if (timed) a.okT += ok;
+    if (s.parcel_count && (ok + fl) > 0) { a.parcels += s.parcel_count; a.parcelDrops += ok + fl; }
+  });
+  return Object.values(agg).map(a => Object.assign(a, {
+    hours: a.minDays ? a.mins / 60 : null,
+    succ: (a.ok + a.fail) ? Math.round(a.ok * 1000 / (a.ok + a.fail)) / 10 : null,
+    ppd: a.parcelDrops ? Math.round(a.parcels * 100 / a.parcelDrops) / 100 : null,
+    dph: a.minDays && a.mins ? Math.round(a.okT * 600 / a.mins) / 10 : null
+  }));
+}
+
+async function xPerf(to, depot, el) {
+  const from = xAddDays(to, -6);
+  const dq = depot ? '&depot=eq.' + encodeURIComponent(depot) : '';
+  const rows = await sbFetch('driver_shifts?shift_date=gte.' + from + '&shift_date=lte.' + to + dq + '&eod_submitted_at=not.is.null&select=*&order=shift_date.asc') || [];
+  const list = xPerfAgg(rows);
+  if (!list.length) { el.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0;">No completed days in this period.</p>'; return; }
+  list.sort((a, b) => ((a.succ == null ? 101 : a.succ) - (b.succ == null ? 101 : b.succ)));
+  const dash = '<td style="text-align:center;color:var(--muted);">-</td>';
+  const num = (v, f) => v == null ? dash : '<td style="text-align:center;">' + f(v) + '</td>';
+  let h = '<p style="font-size:12px;color:var(--muted);margin-bottom:8px;">7 days to ' + xUK(to) + ', completed days only, training days excluded. Lowest delivery success first. On-road hours run from depot departure to back at depot, so days without a departure time are left out of hours and drops per hour. Parcels per drop uses days with a parcel count.</p>' +
+    '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;background:var(--white);border:1px solid var(--border);">' +
+    '<tr style="background:var(--navy);color:#fff;"><th style="text-align:left;padding:8px;">Driver</th><th>Days</th><th>On-road hrs</th><th>Miles</th><th>Drops done</th><th>Failed</th><th>Success</th><th>Parcels / drop</th><th>Drops / hr</th></tr>';
+  list.forEach(a => {
+    const sc = a.succ == null ? dash : '<td style="text-align:center;font-weight:700;color:' + (a.succ >= 97 ? 'var(--green)' : a.succ >= 93 ? 'var(--amber)' : 'var(--red)') + ';">' + a.succ + '%</td>';
+    h += '<tr style="border-top:1px solid var(--border);"><td style="padding:8px;"><strong>' + xEsc(a.name) + '</strong><br><span style="color:var(--muted);">' + xEsc(a.depot) + '</span></td>' +
+      '<td style="text-align:center;">' + a.days + '</td>' + num(a.hours, v => v.toFixed(1)) + '<td style="text-align:center;">' + a.miles + '</td>' +
+      '<td style="text-align:center;">' + a.ok + '</td><td style="text-align:center;">' + a.fail + '</td>' + sc + num(a.ppd, v => v.toFixed(2)) + num(a.dph, v => v.toFixed(1)) + '</tr>';
+  });
+  el.innerHTML = h + '</table></div>';
 }
 
 async function xCompliance(to, depot, el) {
