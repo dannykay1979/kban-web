@@ -1266,7 +1266,7 @@ function xBuildDay(date, depot, D, vcMap) {
   shifts.forEach(s => byName.set(xNorm(s.driver_name), s));
   const expected = new Map();
   if (plan) (plan.drivers || []).forEach(e => {
-    if ((e.operating_days || []).indexOf(dn) >= 0) expected.set(xNorm(e.name), { name: e.name, src: 'Rota' });
+    if ((e.operating_days || []).indexOf(dn) >= 0) expected.set(xNorm(e.name), { name: e.name, src: 'Rota', rota: e });
   });
   const onRota = new Set(expected.keys());
   chg.forEach(c => {
@@ -1289,7 +1289,7 @@ function xBuildDay(date, depot, D, vcMap) {
       if (abs) { row.kind = 'absent'; row.note = abs.change_type + (abs.notes ? ': ' + abs.notes : ''); }
       else row.kind = 'noshow';
     } else {
-      xCheckShift(row, s, vcMap);
+      xCheckShift(row, s, vcMap, e.rota, changes);
       if (abs) row.flags.push('Logged as ' + abs.change_type + ' but checked in');
     }
     rows.push(row);
@@ -1302,10 +1302,13 @@ function xBuildDay(date, depot, D, vcMap) {
     if (plan) { row.kind = row.kind === 'ok' ? 'unplanned' : row.kind; row.flags.unshift('Not on the rota and no change logged'); }
     rows.push(row);
   });
+  const fcUse = {};
+  rows.forEach(r => { const v = r.shift && r.shift.fuel_card; if (v && v !== 'NONE') { const k = String(v).toUpperCase().replace(/\s+/g, ' ').trim(); (fcUse[k] = fcUse[k] || []).push(r); } });
+  Object.keys(fcUse).forEach(k => { if (fcUse[k].length > 1) fcUse[k].forEach(r => r.flags.push('Fuel card ' + k + ' also used by ' + fcUse[k].filter(o => o !== r).map(o => o.name).join(', '))); });
   return { depot, date, hasPlan: !!plan, week: wk, rows };
 }
 
-function xCheckShift(row, s, vcMap) {
+function xCheckShift(row, s, vcMap, rota, changes) {
   const training = s.day_type && s.day_type !== 'standard';
   const sod = !!s.sod_submitted_at || s.status === 'sod_complete' || s.status === 'eod_complete' || s.status === 'lead_confirmed';
   const vc = training || !!s.vehicle_check_id;
@@ -1322,6 +1325,15 @@ function xCheckShift(row, s, vcMap) {
   (Array.isArray(s.data_flags) ? s.data_flags : []).forEach(f => row.flags.push(XR_FLAG_TEXT[f] || f));
   const v = vcMap && s.vehicle_check_id ? vcMap[s.vehicle_check_id] : null;
   if (v && v.has_defects) row.flags.push('Vehicle defects reported' + (v.defect_notes ? ': ' + v.defect_notes : ''));
+  if (!training) {
+    const nid = x => String(x || '').toUpperCase().replace(/\s+/g, '');
+    const swap = (changes || []).filter(c => c.new_route_id).pop();
+    const expRoute = swap ? swap.new_route_id : (rota && (rota.route_id || rota.temp_id));
+    if (expRoute && s.reported_id && nid(expRoute) !== nid(s.reported_id)) row.flags.push('Route ID ' + s.reported_id + ' differs from rota (' + expRoute + ')');
+    const fc = x => { const v = String(x || '').toUpperCase().replace(/\s+/g, ' ').trim(); return /^\d+$/.test(v) ? 'KBAN ' + v : v; };
+    const rc = rota && fc(rota.fuel_card);
+    if (rc && s.fuel_card && fc(s.fuel_card) !== rc) row.flags.push(s.fuel_card === 'NONE' ? 'No fuel card today (rota has ' + rc + ')' : 'Fuel card ' + fc(s.fuel_card) + ' differs from rota (' + rc + ')');
+  }
   row.kind = row.missing.length ? 'incomplete' : 'ok';
 }
 
