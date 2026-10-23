@@ -1330,6 +1330,12 @@ function xCheckShift(row, s, vcMap, rota, changes) {
     const swap = (changes || []).filter(c => c.new_route_id).pop();
     const expRoute = swap ? swap.new_route_id : (rota && (rota.route_id || rota.temp_id));
     if (expRoute && s.reported_id && nid(expRoute) !== nid(s.reported_id)) row.flags.push('Route ID ' + s.reported_id + ' differs from rota (' + expRoute + ')');
+    const pa = rota && rota.planned_arrival, ta = s.time_at_depot;
+    if (pa && ta && !(changes || []).some(c => c.change_type === 'Late start')) {
+      const mm = x => { const p = String(x).split(':'); return parseInt(p[0], 10) * 60 + parseInt(p[1], 10); };
+      const late = mm(ta) - mm(pa);
+      if (late >= 10) row.flags.push('Arrived at depot ' + String(ta).slice(0, 5) + ', ' + late + ' min after planned ' + String(pa).slice(0, 5));
+    }
     const fc = x => { const v = String(x || '').toUpperCase().replace(/\s+/g, ' ').trim(); return /^\d+$/.test(v) ? 'KBAN ' + v : v; };
     const cswap = (changes || []).filter(c => c.new_fuel_card).pop();
     const rc = cswap ? fc(cswap.new_fuel_card) : (rota && fc(rota.fuel_card));
