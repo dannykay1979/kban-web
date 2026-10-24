@@ -1,7 +1,3 @@
-const { Resend } = require('resend');
-
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const uk = s => (/^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) ? String(s).split('-').reverse().join('/') : esc(s));
 const list = a => (Array.isArray(a) ? a : []);
@@ -48,12 +44,23 @@ module.exports = async (req, res) => {
     const html = '<div style="font-family:Arial,sans-serif;font-size:14px;color:#1b2430;">' + body +
       '<p style="color:#888;font-size:12px;margin-top:24px;border-top:1px solid #eee;padding-top:12px;">Sent by the KBAN Weekly Rota page, kban-web.vercel.app</p></div>';
 
-    await resend.emails.send({
-      from: 'KBAN Ops <ops@send.kbanlogistics.co.uk>',
-      to: ['daniel@kbanlogistics.co.uk'],
-      subject: 'Rota ' + (b.resubmit ? 'updated' : 'submitted') + ': ' + depot + ' w/c ' + uk(weekStart),
-      html,
+    if (!process.env.RESEND_API_KEY) {
+      return res.status(500).json({ error: 'RESEND_API_KEY is not set' });
+    }
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + process.env.RESEND_API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'KBAN Ops <ops@send.kbanlogistics.co.uk>',
+        to: ['daniel@kbanlogistics.co.uk'],
+        subject: 'Rota ' + (b.resubmit ? 'updated' : 'submitted') + ': ' + depot + ' w/c ' + uk(weekStart),
+        html,
+      }),
     });
+    if (!r.ok) {
+      console.error('Resend error:', r.status, await r.text());
+      return res.status(502).json({ error: 'Email service refused the message' });
+    }
     return res.status(200).json({ success: true });
   } catch (error) {
     console.error('Rota notify error:', error);
