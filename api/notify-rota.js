@@ -52,7 +52,7 @@ module.exports = async (req, res) => {
       headers: { 'Authorization': 'Bearer ' + process.env.RESEND_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         from: 'KBAN Ops <ops@send.kbanlogistics.co.uk>',
-        to: ['daniel@kbanlogistics.co.uk'],
+        to: ['daniel@kbanlogistics.co.uk', 'wayne@kbanlogistics.co.uk'],
         subject: 'Rota ' + (b.resubmit ? 'updated' : 'submitted') + ': ' + depot + ' w/c ' + uk(weekStart),
         html,
       }),
