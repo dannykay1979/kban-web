@@ -2,57 +2,86 @@
 <html lang="en-GB">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>KBAN Weekly Rota</title>
 <style>
-  :root { --navy:#0B2E4E; --bg:#F3F5F8; --line:#D5DAE1; --red:#B42318; --green:#146C2E; }
-  * { box-sizing:border-box; }
-  body { margin:0; font-family:Arial,Helvetica,sans-serif; background:var(--bg); color:#1b2430; font-size:16px; }
-  header { background:var(--navy); color:#fff; padding:14px 16px; font-weight:bold; font-size:18px; }
-  main { max-width:640px; margin:0 auto; padding:16px; }
-  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
-  label { display:block; font-weight:bold; font-size:14px; margin:12px 0 4px; }
-  select, input[type=text], input[type=time], input[type=date] { width:100%; padding:12px; font-size:16px; border:1px solid var(--line); border-radius:8px; background:#fff; font-family:inherit; }
-  button { width:100%; padding:14px; margin-top:12px; background:var(--navy); color:#fff; border:0; border-radius:8px; font-size:16px; font-weight:bold; }
-  button.sec { background:#fff; color:var(--navy); border:1px solid var(--navy); }
-  button.rm { background:#fff; color:var(--red); border:1px solid var(--red); padding:8px; font-size:14px; margin-top:12px; }
-  button:disabled { opacity:.5; }
-  .msg { padding:10px 12px; border-radius:8px; margin-top:12px; font-size:14px; display:none; }
-  .msg.err { background:#FDE8E8; color:var(--red); display:block; }
-  .msg.ok { background:#E3F4E8; color:var(--green); display:block; }
-  .msg ul { margin:6px 0 0 18px; padding:0; }
-  .hint { font-size:13px; color:#5b6675; margin-top:4px; }
-  h2 { font-size:16px; margin:0 0 8px; }
-  .drv { border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:12px; background:#FBFCFD; }
-  .two { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-  .days { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-top:6px; }
-  .days label { margin:0; font-weight:normal; font-size:12px; text-align:center; border:1px solid var(--line); border-radius:6px; padding:6px 0; background:#fff; }
-  .days input { width:auto; display:block; margin:0 auto 2px; }
-  .hide { display:none; }
+:root {
+  --navy:#0B2E4E; --blue:#2E83F0; --lblue:#e8f2fe;
+  --border:#d0d7de; --bg:#f0f4f8; --white:#fff;
+  --text:#1a1a2e; --muted:#6b7280;
+  --green:#16a34a; --gbg:#dcfce7; --red:#dc2626; --rbg:#fee2e2;
+  --r:12px; --sh:0 1px 4px rgba(0,0,0,.08),0 4px 12px rgba(0,0,0,.06);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--text);font-size:15px;padding-bottom:48px}
+header{background:var(--navy);padding:14px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.logo{width:38px;height:38px;flex-shrink:0}
+.htxt h1{color:#fff;font-size:17px;font-weight:700;line-height:1.2}
+.htxt p{color:rgba(255,255,255,.5);font-size:12px}
+.wrap{max-width:560px;margin:0 auto;padding:20px 16px 32px}
+.card{background:var(--white);border-radius:var(--r);box-shadow:var(--sh);margin-bottom:14px;overflow:hidden}
+.ch{background:var(--navy);padding:11px 14px;display:flex;align-items:center;justify-content:space-between;gap:9px}
+.ch h2{color:#fff;font-size:14px;font-weight:600}
+.cb{padding:16px}
+.f{margin-bottom:14px}.f:last-child{margin-bottom:0}
+label{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px}
+label .r{color:var(--blue)}
+input,select{width:100%;padding:13px 14px;border:1.5px solid var(--border);border-radius:9px;font-size:16px;font-family:inherit;background:var(--white);color:var(--text);-webkit-appearance:none;appearance:none;transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(46,131,240,.15)}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 13px center;padding-right:38px}
+.hint{font-size:11px;color:var(--muted);margin-top:4px;font-style:italic}
+.intro{font-size:13px;color:var(--navy);background:var(--lblue);border:1px solid #bfdbfe;border-radius:8px;padding:10px 13px;line-height:1.45}
+.btn{width:100%;padding:16px;background:var(--blue);color:#fff;border:none;border-radius:var(--r);font-size:17px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(46,131,240,.35);transition:opacity .15s;margin-top:14px}
+.btn:disabled{background:#93c5fd;box-shadow:none;cursor:not-allowed;opacity:.7}
+.btn.ghost{background:none;color:var(--blue);border:1.5px solid var(--blue);box-shadow:none;font-size:14px;padding:12px}
+.btn.rm{background:none;color:var(--red);border:1.5px solid #fca5a5;box-shadow:none;font-size:13px;padding:9px;margin-top:12px}
+.msg{display:none;border-radius:8px;padding:11px 13px;font-size:13px;margin-top:14px;line-height:1.45}
+.msg.err{display:block;background:var(--rbg);color:var(--red);border:1px solid #fca5a5}
+.msg.ok{display:block;background:var(--gbg);color:#14532d;border:1px solid #86efac}
+.msg ul{margin:6px 0 0 18px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.days label{margin:0;font-size:12px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--navy);text-align:center;border:1.5px solid var(--border);border-radius:9px;padding:8px 0;background:var(--white);cursor:pointer}
+.days input{width:auto;display:block;margin:0 auto 3px;padding:0;accent-color:var(--blue)}
+.drv{background:var(--white);border-radius:var(--r);box-shadow:var(--sh);margin-bottom:14px;padding:16px;border-top:4px solid var(--navy)}
+.drv>label,.drv .two label{margin-top:12px}
+.drv>label:first-child{margin-top:0}
+.drv .f-new{margin-top:8px}
+.hide{display:none}
 </style>
 </head>
 <body>
-<header>KBAN Weekly Rota</header>
-<main>
+
+<header>
+  <svg class="logo" viewBox="0 0 38 38" xmlns="http://www.w3.org/2000/svg" width="38" height="38">
+    <rect width="38" height="38" fill="#0B2E4E"/>
+    <polygon points="13,8 21,19 13,30 16,33 26,19 16,5" fill="#2E83F0" opacity="0.45"/>
+    <polygon points="8,8 16,19 8,30 11,33 21,19 11,5" fill="#2E83F0"/>
+  </svg>
+  <div class="htxt"><h1>Weekly Rota</h1><p>KBAN Logistics</p></div>
+</header>
+
+<div class="wrap">
   <div class="card">
-    <h2>Submit the rota for the week</h2>
-    <div class="hint">One rota per depot per week, due by Friday for the following week. Once you submit it is live. You can come back and resubmit to correct it. Day to day changes go on the Daily Changes page, not here.</div>
-    <label for="depot">Depot</label>
-    <select id="depot"><option value="">Select depot</option></select>
-    <label for="week">Week commencing (Monday)</label>
-    <select id="week"></select>
-    <label for="by">Your name</label>
-    <input type="text" id="by" autocomplete="name">
-    <button class="sec" id="copy" type="button">Copy last week's rota</button>
-    <div class="hint" id="loadnote"></div>
+    <div class="ch"><h2>Rota details</h2></div>
+    <div class="cb">
+      <div class="intro">One rota per depot per week, due by Friday for the following week. Check every driver, route, arrival time, fuel card and day before you submit. Once submitted it is live. You can reopen the same week and resubmit to correct it. Day to day changes go on the Daily Changes page, not here.</div>
+      <div class="f" style="margin-top:14px"><label for="depot">Depot</label>
+        <select id="depot"><option value="">Select depot</option></select></div>
+      <div class="f"><label for="week">Week commencing (Monday)</label>
+        <select id="week"></select></div>
+      <div class="f"><label for="by">Your name</label>
+        <input type="text" id="by" autocomplete="name"></div>
+      <div class="hint" id="loadnote"></div>
+    </div>
   </div>
 
   <div id="rows"></div>
-  <button class="sec" id="add" type="button">+ Add a driver</button>
+  <button class="btn ghost" id="add" type="button" style="margin-top:0">+ Add a driver</button>
   <div class="msg" id="msg"></div>
-  <button id="go" type="button">Submit rota</button>
-  <div class="hint" style="margin:12px 0 32px">New starter: choose "New starter" in the driver box and type their name. Leaver: set Starter / Leaver to Leaver with the last day. Both are emailed to the office so the driver register is updated.</div>
-</main>
+  <button class="btn" id="go" type="button">Submit rota</button>
+  <div class="hint" style="margin-top:12px;text-align:center">New starter: choose "New starter" in the driver box and type their name. Leaver: set Starter / Leaver to Leaver with the last day. Both are emailed to the office so the driver register is updated.</div>
+</div>
 
 <script>
 const SUPABASE_URL = 'https://eacaudjkppyhpsjzoakv.supabase.co';
@@ -155,7 +184,7 @@ function addRow(e) {
     '<label>Days working</label>' + dayBoxes(e.operating_days) +
     '<div class="two"><div><label>Starter / Leaver</label><select class="f-status"><option value="">Neither</option><option value="starter"' + (e.status === 'starter' ? ' selected' : '') + '>Starter</option><option value="leaver"' + (e.status === 'leaver' ? ' selected' : '') + '>Leaver</option></select></div>' +
     '<div class="f-sdwrap' + (e.status ? '' : ' hide') + '"><label class="f-sdlab">First or last day</label><input type="date" class="f-sd" value="' + esc(e.status_date || '') + '"></div></div>' +
-    '<button class="rm" type="button">Remove this driver</button>';
+    '<button class="btn rm" type="button">Remove this driver</button>';
   $('rows').appendChild(div);
   const nameSel = div.querySelector('.f-name'), stat = div.querySelector('.f-status');
   nameSel.addEventListener('change', () => {
@@ -204,20 +233,9 @@ async function loadWeek() {
       $('loadnote').textContent = 'A rota is already in for this week (submitted by ' + (cur.set_by || 'unknown') + '). You can edit it and resubmit.';
     } else {
       addRow();
-      $('loadnote').textContent = 'No rota in yet for this week. Use Copy last week to start from the previous rota.';
+      $('loadnote').textContent = 'No rota submitted yet for this week. Add each driver below.';
     }
   } catch (e) { show('err', 'Could not load the rota. Check your signal and refresh.'); }
-}
-async function copyLast() {
-  const depot = $('depot').value, wk = $('week').value;
-  if (!depot || !wk) return show('err', 'Select the depot and week first.');
-  try {
-    const prev = await fetchPlan(depot, addDays(wk, -7));
-    if (!prev || !(prev.drivers || []).length) return show('err', 'There is no rota for the previous week to copy.');
-    const keep = prev.drivers.filter(e => e.status !== 'leaver').map(e => { const c = Object.assign({}, e); delete c.status; delete c.status_date; return c; });
-    fillFrom({ drivers: keep });
-    show('ok', 'Copied last week (' + keep.length + ' drivers). Leavers were left off and starter flags cleared. Check every row, then submit.');
-  } catch (e) { show('err', 'Could not copy last week. Check your signal and try again.'); }
 }
 async function submit() {
   const depot = $('depot').value, wk = $('week').value, by = $('by').value.trim();
@@ -274,7 +292,6 @@ if (typeof document !== 'undefined' && document.getElementById('go')) {
   $('depot').addEventListener('change', loadWeek);
   $('week').addEventListener('change', loadWeek);
   $('add').addEventListener('click', () => { if (!$('depot').value) return show('err', 'Select the depot first.'); addRow(); });
-  $('copy').addEventListener('click', copyLast);
   $('go').addEventListener('click', submit);
   init();
 }
