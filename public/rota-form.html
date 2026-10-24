@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KBAN Weekly Rota</title>
+<style>
+  :root { --navy:#0B2E4E; --bg:#F3F5F8; --line:#D5DAE1; --red:#B42318; --green:#146C2E; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:Arial,Helvetica,sans-serif; background:var(--bg); color:#1b2430; font-size:16px; }
+  header { background:var(--navy); color:#fff; padding:14px 16px; font-weight:bold; font-size:18px; }
+  main { max-width:640px; margin:0 auto; padding:16px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  label { display:block; font-weight:bold; font-size:14px; margin:12px 0 4px; }
+  select, input[type=text], input[type=time], input[type=date] { width:100%; padding:12px; font-size:16px; border:1px solid var(--line); border-radius:8px; background:#fff; font-family:inherit; }
+  button { width:100%; padding:14px; margin-top:12px; background:var(--navy); color:#fff; border:0; border-radius:8px; font-size:16px; font-weight:bold; }
+  button.sec { background:#fff; color:var(--navy); border:1px solid var(--navy); }
+  button.rm { background:#fff; color:var(--red); border:1px solid var(--red); padding:8px; font-size:14px; margin-top:12px; }
+  button:disabled { opacity:.5; }
+  .msg { padding:10px 12px; border-radius:8px; margin-top:12px; font-size:14px; display:none; }
+  .msg.err { background:#FDE8E8; color:var(--red); display:block; }
+  .msg.ok { background:#E3F4E8; color:var(--green); display:block; }
+  .msg ul { margin:6px 0 0 18px; padding:0; }
+  .hint { font-size:13px; color:#5b6675; margin-top:4px; }
+  h2 { font-size:16px; margin:0 0 8px; }
+  .drv { border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:12px; background:#FBFCFD; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .days { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-top:6px; }
+  .days label { margin:0; font-weight:normal; font-size:12px; text-align:center; border:1px solid var(--line); border-radius:6px; padding:6px 0; background:#fff; }
+  .days input { width:auto; display:block; margin:0 auto 2px; }
+  .hide { display:none; }
+</style>
+</head>
+<body>
+<header>KBAN Weekly Rota</header>
+<main>
+  <div class="card">
+    <h2>Submit the rota for the week</h2>
+    <div class="hint">One rota per depot per week, due by Friday for the following week. Once you submit it is live. You can come back and resubmit to correct it. Day to day changes go on the Daily Changes page, not here.</div>
+    <label for="depot">Depot</label>
+    <select id="depot"><option value="">Select depot</option></select>
+    <label for="week">Week commencing (Monday)</label>
+    <select id="week"></select>
+    <label for="by">Your name</label>
+    <input type="text" id="by" autocomplete="name">
+    <button class="sec" id="copy" type="button">Copy last week's rota</button>
+    <div class="hint" id="loadnote"></div>
+  </div>
+
+  <div id="rows"></div>
+  <button class="sec" id="add" type="button">+ Add a driver</button>
+  <div class="msg" id="msg"></div>
+  <button id="go" type="button">Submit rota</button>
+  <div class="hint" style="margin:12px 0 32px">New starter: choose "New starter" in the driver box and type their name. Leaver: set Starter / Leaver to Leaver with the last day. Both are emailed to the office so the driver register is updated.</div>
+</main>
+
+<script>
+const SUPABASE_URL = 'https://eacaudjkppyhpsjzoakv.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhY2F1ZGprcHB5aHBzanpvYWt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1NDYwNzYsImV4cCI6MjA5ODEyMjA3Nn0.oxPp4xwKyt7MjeefQiC8zKApzwydlqst_GY1WyLVmxU';
+const DEPOTS = ['DHL Middleton', 'DHL Runcorn', 'DPD Aberdeen', 'DPD Edinburgh'];
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+let drivers = {};
+let seq = 0;
+
+async function sb(path, opts) {
+  opts = opts || {};
+  const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, {
+    method: opts.method || 'GET',
+    body: opts.body,
+    headers: { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }
+  });
+  if (!res.ok) throw new Error((await res.text()) || res.status);
+  const t = await res.text();
+  return t ? JSON.parse(t) : null;
+}
+const $ = id => document.getElementById(id);
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function pad(n) { return String(n).padStart(2, '0'); }
+function isoLocal(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+function addDays(iso, n) { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return isoLocal(d); }
+function ukDate(s) { return s.split('-').reverse().join('/'); }
+function normCard(x) { x = String(x || '').trim().toUpperCase().replace(/\s+/g, ' '); return /^\d+$/.test(x) ? 'KBAN ' + x : x; }
+function norm(s) { return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+
+// Validate rows (array of plain objects). Returns list of error strings. Same rules as the Excel loader.
+function validateRows(rows, wk, validNames) {
+  const errs = [], seen = {}, valid = new Set((validNames || []).map(norm));
+  const cover = {};
+  DAYS.forEach(d => { cover[d] = false; });
+  rows.forEach((r, i) => {
+    const n = i + 1, who = r.name ? r.name : 'Driver ' + n;
+    if (!r.name) { errs.push('Driver ' + n + ': choose a driver.'); return; }
+    if (r.status !== 'starter' && !valid.has(norm(r.name))) errs.push(who + ': not on the driver list for this depot. If they are new, choose New starter.');
+    if (seen[norm(r.name)]) errs.push(who + ': listed twice.');
+    seen[norm(r.name)] = true;
+    if (!r.route) errs.push(who + ': route or temp ID missing.');
+    if (!r.arrival) errs.push(who + ': planned arrival time missing.');
+    if (!r.days.length) errs.push(who + ': no days selected.');
+    if (r.status && !r.statusDate) errs.push(who + ': ' + (r.status === 'starter' ? 'first day' : 'last day') + ' missing.');
+    if (r.status && r.statusDate) {
+      if (r.statusDate < wk || r.statusDate > addDays(wk, 6)) errs.push(who + ': ' + r.status + ' date ' + ukDate(r.statusDate) + ' is outside this week.');
+      else DAYS.forEach((dn, k) => {
+        if (r.days.indexOf(dn) < 0) return;
+        const dd = addDays(wk, k);
+        if (r.status === 'leaver' && dd > r.statusDate) errs.push(who + ': working ' + dn + ' after last day ' + ukDate(r.statusDate) + '.');
+        if (r.status === 'starter' && dd < r.statusDate) errs.push(who + ': working ' + dn + ' before first day ' + ukDate(r.statusDate) + '.');
+      });
+    }
+    r.days.forEach(d => { cover[d] = true; });
+  });
+  DAYS.slice(0, 5).forEach(d => { if (!cover[d]) errs.push('Nobody is planned on ' + d + '.'); });
+  return errs;
+}
+
+function buildEntries(rows, depot) {
+  return rows.map(r => {
+    const e = { name: r.name, planned_arrival: r.arrival, fuel_card: r.card || '', operating_days: DAYS.filter(d => r.days.indexOf(d) >= 0) };
+    e[depot.indexOf('DPD') === 0 ? 'route_id' : 'temp_id'] = r.route;
+    if (r.status && r.statusDate) { e.status = r.status; e.status_date = r.statusDate; }
+    return e;
+  });
+}
+
+function mondays() {
+  const t = new Date(); t.setHours(12, 0, 0, 0);
+  const mon = isoLocal(new Date(t.getFullYear(), t.getMonth(), t.getDate() - ((t.getDay() + 6) % 7), 12));
+  const out = [];
+  for (let i = 0; i < 6; i++) out.push(addDays(mon, i * 7));
+  return out;
+}
+function nextMonday() {
+  const m = mondays(), today = isoLocal(new Date());
+  return m.filter(x => x > today)[0] || m[1];
+}
+
+function dayBoxes(sel) {
+  return '<div class="days">' + DAYS.map(d => '<label><input type="checkbox" data-day="' + d + '"' + (sel && sel.indexOf(d) >= 0 ? ' checked' : '') + '>' + d + '</label>').join('') + '</div>';
+}
+function addRow(e) {
+  e = e || {};
+  const id = ++seq, depot = $('depot').value;
+  const list = (drivers[depot] || []).slice();
+  const known = e.name && list.some(x => norm(x) === norm(e.name));
+  if (e.name && !known && e.status !== 'starter') list.push(e.name);
+  const starterName = e.status === 'starter' && !known ? e.name : '';
+  const opts = '<option value="">Select driver</option>' + list.map(n => '<option value="' + esc(n) + '"' + (e.name && norm(e.name) === norm(n) && !starterName ? ' selected' : '') + '>' + esc(n) + '</option>').join('') +
+    '<option value="__new"' + (starterName ? ' selected' : '') + '>New starter (type name)</option>';
+  const div = document.createElement('div');
+  div.className = 'drv'; div.id = 'r' + id;
+  div.innerHTML = '<label>Driver</label><select class="f-name">' + opts + '</select>' +
+    '<input type="text" class="f-new' + (starterName ? '' : ' hide') + '" placeholder="Full name of the new starter" value="' + esc(starterName) + '" style="margin-top:8px">' +
+    '<div class="two"><div><label>Route / temp ID</label><input type="text" class="f-route" value="' + esc(e.route_id || e.temp_id || '') + '" autocapitalize="characters"></div>' +
+    '<div><label>Planned arrival</label><input type="time" class="f-arr" value="' + esc(e.planned_arrival || '') + '"></div></div>' +
+    '<label>Fuel card (KBAN number)</label><input type="text" class="f-card" value="' + esc(e.fuel_card || '') + '" placeholder="e.g. 21">' +
+    '<label>Days working</label>' + dayBoxes(e.operating_days) +
+    '<div class="two"><div><label>Starter / Leaver</label><select class="f-status"><option value="">Neither</option><option value="starter"' + (e.status === 'starter' ? ' selected' : '') + '>Starter</option><option value="leaver"' + (e.status === 'leaver' ? ' selected' : '') + '>Leaver</option></select></div>' +
+    '<div class="f-sdwrap' + (e.status ? '' : ' hide') + '"><label class="f-sdlab">First or last day</label><input type="date" class="f-sd" value="' + esc(e.status_date || '') + '"></div></div>' +
+    '<button class="rm" type="button">Remove this driver</button>';
+  $('rows').appendChild(div);
+  const nameSel = div.querySelector('.f-name'), stat = div.querySelector('.f-status');
+  nameSel.addEventListener('change', () => {
+    const isNew = nameSel.value === '__new';
+    div.querySelector('.f-new').classList.toggle('hide', !isNew);
+    if (isNew) { stat.value = 'starter'; stat.dispatchEvent(new Event('change')); }
+  });
+  stat.addEventListener('change', () => {
+    div.querySelector('.f-sdwrap').classList.toggle('hide', !stat.value);
+    div.querySelector('.f-sdlab').textContent = stat.value === 'leaver' ? 'Last day' : 'First day';
+  });
+  stat.dispatchEvent(new Event('change'));
+  div.querySelector('.rm').addEventListener('click', () => div.remove());
+}
+function readRows() {
+  return [...document.querySelectorAll('#rows .drv')].map(div => {
+    const sel = div.querySelector('.f-name').value;
+    const name = sel === '__new' ? div.querySelector('.f-new').value.trim().replace(/\s+/g, ' ') : sel;
+    return { name, route: div.querySelector('.f-route').value.trim().toUpperCase(), arrival: div.querySelector('.f-arr').value,
+      card: normCard(div.querySelector('.f-card').value),
+      days: [...div.querySelectorAll('[data-day]')].filter(c => c.checked).map(c => c.dataset.day),
+      status: div.querySelector('.f-status').value, statusDate: div.querySelector('.f-sd').value };
+  }).filter(r => r.name || r.route || r.arrival || r.days.length);
+}
+function show(kind, text, list) {
+  const m = $('msg'); m.className = 'msg ' + kind;
+  m.innerHTML = esc(text) + (list && list.length ? '<ul>' + list.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '');
+  if (kind === 'err') m.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+async function fetchPlan(depot, wk) {
+  const r = await sb('depot_weekly_plan?depot=eq.' + encodeURIComponent(depot) + '&week_start=eq.' + wk + '&select=id,drivers,set_by,updated_at&order=updated_at.desc&limit=1');
+  return r && r[0] ? r[0] : null;
+}
+function fillFrom(plan) {
+  $('rows').innerHTML = '';
+  (plan.drivers || []).forEach(e => addRow(e));
+}
+async function loadWeek() {
+  const depot = $('depot').value, wk = $('week').value;
+  $('rows').innerHTML = ''; $('loadnote').textContent = ''; show('', '');
+  if (!depot || !wk) return;
+  try {
+    const cur = await fetchPlan(depot, wk);
+    if (cur && (cur.drivers || []).length) {
+      fillFrom(cur);
+      $('loadnote').textContent = 'A rota is already in for this week (submitted by ' + (cur.set_by || 'unknown') + '). You can edit it and resubmit.';
+    } else {
+      addRow();
+      $('loadnote').textContent = 'No rota in yet for this week. Use Copy last week to start from the previous rota.';
+    }
+  } catch (e) { show('err', 'Could not load the rota. Check your signal and refresh.'); }
+}
+async function copyLast() {
+  const depot = $('depot').value, wk = $('week').value;
+  if (!depot || !wk) return show('err', 'Select the depot and week first.');
+  try {
+    const prev = await fetchPlan(depot, addDays(wk, -7));
+    if (!prev || !(prev.drivers || []).length) return show('err', 'There is no rota for the previous week to copy.');
+    const keep = prev.drivers.filter(e => e.status !== 'leaver').map(e => { const c = Object.assign({}, e); delete c.status; delete c.status_date; return c; });
+    fillFrom({ drivers: keep });
+    show('ok', 'Copied last week (' + keep.length + ' drivers). Leavers were left off and starter flags cleared. Check every row, then submit.');
+  } catch (e) { show('err', 'Could not copy last week. Check your signal and try again.'); }
+}
+async function submit() {
+  const depot = $('depot').value, wk = $('week').value, by = $('by').value.trim();
+  if (!depot) return show('err', 'Select the depot.');
+  if (!wk) return show('err', 'Select the week.');
+  if (by.length < 2) return show('err', 'Enter your name.');
+  const rows = readRows();
+  if (!rows.length) return show('err', 'Add at least one driver.');
+  const errs = validateRows(rows, wk, drivers[depot] || []);
+  if (errs.length) return show('err', 'Fix these before submitting:', errs);
+  const entries = buildEntries(rows, depot);
+  $('go').disabled = true;
+  try {
+    const prevWeek = await fetchPlan(depot, addDays(wk, -7));
+    const cur = await fetchPlan(depot, wk);
+    const base = cur || prevWeek;
+    const body = JSON.stringify(cur ? { drivers: entries, set_by: by + ' (rota page)', updated_at: new Date().toISOString() }
+      : { depot, week_start: wk, drivers: entries, set_by: by + ' (rota page)' });
+    if (cur) await sb('depot_weekly_plan?id=eq.' + cur.id, { method: 'PATCH', body });
+    else await sb('depot_weekly_plan', { method: 'POST', body });
+    try { localStorage.setItem('kban_rota_by', by); } catch (e) {}
+    const before = new Set(((base && base.drivers) || []).map(e => norm(e.name))), after = new Set(entries.map(e => norm(e.name)));
+    const known = new Set((drivers[depot] || []).map(norm));
+    const info = {
+      depot, weekStart: wk, submittedBy: by, resubmit: !!cur, total: entries.length,
+      starters: entries.filter(e => e.status === 'starter').map(e => ({ name: e.name, date: e.status_date, onRegister: known.has(norm(e.name)) })),
+      leavers: entries.filter(e => e.status === 'leaver').map(e => ({ name: e.name, date: e.status_date })),
+      added: base ? entries.filter(e => !before.has(norm(e.name))).map(e => e.name) : [],
+      removed: base ? ((base.drivers || []).filter(e => !after.has(norm(e.name))).map(e => e.name)) : [],
+      comparedTo: cur ? 'the version already submitted' : (prevWeek ? 'the previous week' : '')
+    };
+    let mailOk = true;
+    try {
+      const r = await fetch('/api/notify-rota', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(info) });
+      mailOk = r.ok;
+    } catch (e) { mailOk = false; }
+    show('ok', 'Rota saved and live for w/c ' + ukDate(wk) + ' (' + entries.length + ' drivers).' + (mailOk ? ' The office has been emailed.' : ' The email to the office did not send, so please tell the office you have submitted it.'));
+    $('loadnote').textContent = 'A rota is already in for this week (submitted by ' + by + '). You can edit it and resubmit.';
+  } catch (e) { show('err', 'Not saved. Check your signal and try again.'); }
+  $('go').disabled = false;
+}
+
+async function init() {
+  DEPOTS.forEach(d => { const o = document.createElement('option'); o.value = d; o.textContent = d; $('depot').appendChild(o); });
+  const nm = nextMonday();
+  mondays().forEach(m => { const o = document.createElement('option'); o.value = m; o.textContent = 'w/c ' + ukDate(m); if (m === nm) o.selected = true; $('week').appendChild(o); });
+  try { $('by').value = localStorage.getItem('kban_rota_by') || ''; } catch (e) {}
+  try {
+    const rows = await sb('driver_pins?active=eq.true&select=driver_name,depot&order=driver_name');
+    rows.forEach(r => { (drivers[r.depot] = drivers[r.depot] || []); if (drivers[r.depot].indexOf(r.driver_name) < 0) drivers[r.depot].push(r.driver_name); });
+  } catch (e) { show('err', 'Could not load drivers. Check your signal and refresh.'); }
+}
+if (typeof document !== 'undefined' && document.getElementById('go')) {
+  $('depot').addEventListener('change', loadWeek);
+  $('week').addEventListener('change', loadWeek);
+  $('add').addEventListener('click', () => { if (!$('depot').value) return show('err', 'Select the depot first.'); addRow(); });
+  $('copy').addEventListener('click', copyLast);
+  $('go').addEventListener('click', submit);
+  init();
+}
+</script>
+</body>
+</html>
