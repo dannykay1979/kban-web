@@ -698,7 +698,8 @@ async function sbFetch(path, opts={}) {
     const e = await res.json().catch(()=>({}));
     throw new Error(e.message || 'Database error ' + res.status);
   }
-  return res.status === 204 ? null : res.json();
+  const tx = await res.text();
+  return tx ? JSON.parse(tx) : null;
 }
 
 // ── ROTA VIEW ─────────────────────────────────────────────────────────────
@@ -1675,7 +1676,8 @@ async function sbFetchAuth(path, opts={}) {
     }
   });
   if (!res.ok) { const e = await res.json().catch(()=>({message:res.statusText})); throw new Error(e.message||res.statusText); }
-  return res.status === 204 ? [] : res.json();
+  const tx = await res.text();
+  return tx ? JSON.parse(tx) : [];
 }
 
 async function sha256(str) {
