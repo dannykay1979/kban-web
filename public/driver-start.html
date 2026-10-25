@@ -4,44 +4,71 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>KBAN Driver App Start Guide</title>
+<link rel="icon" href="/icon.png">
+<link rel="apple-touch-icon" href="/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-:root{--navy:#0B2E4E;--blue:#2E83F0;--bg:#f0f4f8;--border:#d0d7de;--text:#1a1a2e;--muted:#6b7280}
-*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text);line-height:1.45}
-header{background:var(--navy);color:#fff;padding:16px}header h1{margin:0;font-size:20px}header p{margin:4px 0 0;font-size:13px;opacity:.85}
-main{max-width:640px;margin:0 auto;padding:16px}
-.card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px}
-.card h2{margin:0 0 8px;font-size:17px;color:var(--navy)}
-video{width:100%;max-height:70vh;border-radius:8px;background:#000}
-.btn{display:block;text-align:center;background:var(--blue);color:#fff;text-decoration:none;font-weight:700;padding:14px;border-radius:10px;font-size:16px}
+:root{--navy:#0B2E4E;--navy2:#123F68;--blue:#2E83F0;--bg:#f0f4f8;--border:#d0d7de;--text:#1a1a2e;--muted:#5b6675}
+*{box-sizing:border-box}
+body{margin:0;font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.5}
+h1,h2{font-family:Archivo,"IBM Plex Sans",Arial,sans-serif}
+header{background:var(--navy);color:#fff;padding:14px 16px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.hin{max-width:640px;margin:0 auto;display:flex;align-items:center;gap:12px}
+.logo{flex:none;display:block}
+header h1{margin:0;font-size:19px;font-weight:700;letter-spacing:.2px}
+header p{margin:2px 0 0;font-size:12px;opacity:.75;letter-spacing:.4px}
+.hero{background:linear-gradient(180deg,var(--navy) 0,var(--navy2) 100%);color:#fff;padding:18px 16px 54px}
+.hero div{max-width:640px;margin:0 auto}
+.hero h2{margin:0 0 4px;font-size:24px;font-weight:800;line-height:1.15}
+.hero h2 span{color:var(--blue)}
+.hero p{margin:0;font-size:14px;opacity:.85}
+main{max-width:640px;margin:-36px auto 0;padding:0 16px 24px}
+.card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px;box-shadow:0 4px 14px rgba(11,46,78,.08)}
+.card h2{margin:0 0 10px;font-size:17px;color:var(--navy);display:flex;align-items:center;gap:10px}
+.num{flex:none;width:26px;height:26px;border-radius:50%;background:var(--blue);color:#fff;font-size:14px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+video{width:100%;max-height:70vh;border-radius:8px;background:#000;display:block}
+.btn{display:block;text-align:center;background:var(--blue);color:#fff;text-decoration:none;font-weight:600;padding:14px;border-radius:10px;font-size:16px}
+.btn:active{background:var(--navy)}
 ol{margin:6px 0 0;padding-left:20px}li{margin:6px 0}
-.note{font-size:13px;color:var(--muted)}
+.note{font-size:13px;color:var(--muted);margin:10px 0 0}
+footer{text-align:center;font-size:12px;color:var(--muted);padding:6px 16px 28px}
 </style>
 </head>
 <body>
-<header><h1>KBAN Driver App</h1><p>Start guide for drivers</p></header>
+<header><div class="hin">
+<svg class="logo" viewBox="0 0 38 38" xmlns="http://www.w3.org/2000/svg" width="38" height="38" aria-hidden="true"><rect width="38" height="38" fill="#0B2E4E"/><polygon points="13,8 21,19 13,30 16,33 26,19 16,5" fill="#2E83F0" opacity="0.45"/><polygon points="8,8 16,19 8,30 11,33 21,19 11,5" fill="#2E83F0"/></svg>
+<div><h1>KBAN Driver App</h1><p>KBAN Logistics</p></div>
+</div></header>
+<div class="hero"><div>
+<h2>Getting started <span>in two minutes</span></h2>
+<p>Watch the video, open the app and save it to your phone.</p>
+</div></div>
 <main>
 <div class="card">
-<h2>1. Watch the video</h2>
+<h2><span class="num">1</span>Watch the video</h2>
 <video controls playsinline preload="metadata" src="/KBAN_Driver_Guide_Video.mp4"></video>
 <p class="note">Under 2 minutes. It shows a full start of day, vehicle check and end of day.</p>
 </div>
 <div class="card">
-<h2>2. Open the app</h2>
+<h2><span class="num">2</span>Open the app</h2>
 <a class="btn" href="/driver-form.html">Open the KBAN driver app</a>
 <p class="note">Log in with your name, depot and the personal PIN in your email. Do not share your PIN.</p>
 </div>
 <div class="card">
-<h2>3. Save it to your phone</h2>
+<h2><span class="num">3</span>Save it to your phone</h2>
 <p><b>iPhone (Safari)</b></p>
 <ol><li>Open the driver app page.</li><li>Tap the Share button.</li><li>Tap Add to Home Screen, then Add.</li></ol>
 <p><b>Android (Chrome)</b></p>
 <ol><li>Open the driver app page.</li><li>Tap the three dots at the top right.</li><li>Tap Add to Home screen, then Add.</li></ol>
 </div>
 <div class="card">
-<h2>4. Each day</h2>
+<h2><span class="num">4</span>Each day</h2>
 <ol><li>Enter your route or ID: route ID (DPD), route number (FedEx), driver ID or temp ID (DHL).</li><li>Complete your vehicle check with photos.</li><li>Finish start of day before you leave the depot.</li><li>Complete end of day when you return.</li></ol>
 <p class="note">Stuck? Tell your lead or reply to the email you were sent and we will sort it the same day.</p>
 </div>
 </main>
+<footer>KBAN Logistics Ltd</footer>
 </body>
 </html>
