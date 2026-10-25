@@ -438,8 +438,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <div class="cb">
       <div class="r2" style="margin-bottom:10px;">
         <div class="f">
-          <label>Driver ID <span class="r">*</span></label>
-          <input type="text" id="mg-id" placeholder="e.g. FD72579" autocomplete="off" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()">
+          <label>Driver ID</label>
+          <input type="text" id="mg-id" placeholder="Blank = auto" autocomplete="off" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()">
         </div>
         <div class="f">
           <label>Depot <span class="r">*</span></label>
@@ -471,13 +471,14 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       <div class="r2" style="margin-bottom:10px;">
         <div class="f">
           <label>PIN (4 digits) <span class="r">*</span></label>
-          <input type="password" id="mg-pin" placeholder="••••" maxlength="4" inputmode="numeric" pattern="[0-9]{4}">
+          <input type="text" id="mg-pin" placeholder="••••" maxlength="4" inputmode="numeric" pattern="[0-9]{4}">
         </div>
         <div class="f">
           <label>Confirm PIN <span class="r">*</span></label>
-          <input type="password" id="mg-pin2" placeholder="••••" maxlength="4" inputmode="numeric" pattern="[0-9]{4}">
+          <input type="text" id="mg-pin2" placeholder="••••" maxlength="4" inputmode="numeric" pattern="[0-9]{4}">
         </div>
       </div>
+      <div style="margin:-4px 0 12px;"><button type="button" onclick="fillPin()" style="background:none;border:1px solid var(--border);border-radius:7px;padding:6px 12px;font-size:12px;cursor:pointer;color:var(--blue);">Generate a new PIN</button> <span class="hint">A random PIN is filled in for you. Only issue it once the driver is due to start working.</span></div>
       <div class="r2" style="margin-bottom:10px;">
         <div class="f"><label>Fuel Card (KBAN No.)</label><input type="text" id="mg-fuel-card" placeholder="e.g. KBAN 19" autocomplete="off" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()"></div>
         <div class="f"><label>Card Last 4 Digits</label><input type="text" id="mg-card-last4" placeholder="e.g. 0475" maxlength="4" inputmode="numeric"></div>
@@ -486,6 +487,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
         <label>Driver Type</label>
         <select id="mg-driver-type"><option value="">Select type...</option><option value="se_kban_hire">KBAN-hire self-employed</option><option value="flat_rate">Flat-rate</option><option value="paye">PAYE</option><option value="owner_driver">Owner-driver</option><option value="leaver">Leaver</option></select>
       </div>
+      <div id="mg-result"></div>
       <div id="mg-err" style="display:none;background:var(--rbg);border:1px solid #fca5a5;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--red);margin-bottom:10px;"></div>
       <button class="sbtn" onclick="addDriver()" id="mg-submit-btn">Add Driver</button>
     </div>
@@ -1714,7 +1716,7 @@ async function loadDriverList() {
 }
 
 async function addDriver() {
-  const id         = document.getElementById('mg-id').value.trim().toUpperCase();
+  let id           = document.getElementById('mg-id').value.trim().toUpperCase();
   const name       = document.getElementById('mg-name').value.trim();
   const email      = document.getElementById('mg-email').value.trim();
   const depot      = document.getElementById('mg-depot').value;
@@ -1727,7 +1729,7 @@ async function addDriver() {
   const btn        = document.getElementById('mg-submit-btn');
   const show = msg => { errEl.textContent = msg; errEl.style.display = 'block'; };
   errEl.style.display = 'none';
-  if (!id)                   return show('Driver ID is required.');
+  if (!id) id = 'NEW-' + Math.random().toString(36).slice(2,6).toUpperCase();
   if (!name)                 return show('Full name is required.');
   if (!depot)                return show('Please select a depot.');
   if (!/^\d{4}$/.test(pin)) return show('PIN must be exactly 4 digits.');
@@ -1749,10 +1751,62 @@ async function addDriver() {
     document.getElementById('mg-depot').value='';
     const dt=document.getElementById('mg-driver-type');if(dt)dt.value='';
     loadDriverList();
+    showWelcome(name, depot, email, pin);
+    fillPin();
   } catch(e) {
     show(e.message.includes('duplicate')?id+' already exists for '+depot+'. Deactivate the existing record first.':e.message);
   } finally { btn.disabled=false; btn.textContent='Add Driver'; }
 }
+
+
+// ── New starter helpers: PIN generator and welcome email ──────────────────
+function genPin() {
+  const bad = ['0000','1111','2222','3333','4444','5555','6666','7777','8888','9999','1234','2345','3456','4567','5678','6789','0123','4321','3210','9876','8765','7654','6543','5432','1212','2580','1004','2000'];
+  let p;
+  do { p = String(crypto.getRandomValues(new Uint32Array(1))[0] % 10000).padStart(4,'0'); } while (bad.includes(p));
+  return p;
+}
+function fillPin() {
+  const p = genPin();
+  document.getElementById('mg-pin').value = p;
+  document.getElementById('mg-pin2').value = p;
+}
+function mgEsc(t) { return String(t==null?'':t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function showWelcome(name, depot, email, pin) {
+  const dpd = depot.startsWith('DPD'), dhl = depot.startsWith('DHL');
+  const mgrName = dpd ? 'Paul' : 'Wayne';
+  const mgrMail = dpd ? 'paul@kbanlogistics.co.uk' : 'WayneJnr@kbanlogistics.co.uk';
+  const idWord = dpd ? 'route ID' : (dhl ? 'driver ID or temp ID' : 'route number');
+  const first = name.split(' ')[0];
+  const subject = 'KBAN Driver App: your login and start guide';
+  const body = 'Hi ' + first + ',\n\n' +
+    'We are moving all start of day, vehicle check and end of day reporting into the KBAN driver app. Everything you need is below. Please read it through and get set up before your first shift.\n\n' +
+    '1. Your login\n' +
+    '   Start guide and video: https://kban-web.vercel.app/driver-start.html\n' +
+    '   Depot: ' + depot + '\n' +
+    '   Your personal PIN: ' + pin + '\n' +
+    '   Please do not share your PIN with anyone.\n\n' +
+    '2. Save it to your phone\n' +
+    '   The start guide shows how to add the app to your home screen on iPhone and Android.\n\n' +
+    '3. Before your first shift\n' +
+    '   Watch the video on the start guide page. It is under 2 minutes.\n' +
+    '   Log in and complete your start of day and vehicle check with photos before you leave the depot.\n' +
+    '   Complete end of day when you return.\n' +
+    '   Enter your ' + idWord + ' when the app asks for it.\n\n' +
+    '4. Wise\n' +
+    '   Please also check your Wise profile is complete and your documents are up to date.\n\n' +
+    'If anything does not work, reply to this email or speak to ' + mgName(mgrName) + ' and we will sort it the same day. Please reply to confirm you have received this and can log in.\n\n' +
+    'Kind regards,\nDanny\nKBAN Logistics';
+  const href = 'mailto:' + encodeURIComponent(email||'') + '?cc=' + encodeURIComponent(mgrMail) + '&subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+  document.getElementById('mg-result').innerHTML =
+    '<div style="background:var(--gbg);border:1px solid #86efac;border-radius:10px;padding:12px 14px;margin-bottom:12px;">' +
+    '<div style="font-weight:700;color:var(--green);margin-bottom:4px;">' + mgEsc(name) + ' added to ' + mgEsc(depot) + '</div>' +
+    '<div style="font-size:13px;color:var(--text);margin-bottom:8px;">PIN: <b style="font-size:18px;letter-spacing:2px;">' + mgEsc(pin) + '</b>. This is the only time it is shown, so send the welcome email now.</div>' +
+    (email ? '<a href="' + href + '" style="display:inline-block;background:var(--blue);color:#fff;text-decoration:none;font-weight:600;padding:10px 14px;border-radius:8px;font-size:14px;">Open welcome email (Cc ' + mgEsc(mgrName) + ')</a>' : '<div style="font-size:12px;color:var(--amber);">No email address was entered, so the welcome email cannot be drafted. Give the PIN to the driver directly.</div>') +
+    '</div>';
+}
+function mgName(n) { return n; }
+fillPin();
 
 async function toggleDriver(id, currentlyActive) {
   try {
