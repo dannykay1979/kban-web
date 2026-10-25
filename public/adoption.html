@@ -29,10 +29,11 @@ th{background:#e8f2fe;color:var(--navy)}
 <div class="bar"><label>Date <input type="date" id="d"></label><button id="go">Refresh</button></div>
 <div class="big"><div class="n" id="head">-</div><div class="s" id="sub"></div></div>
 <table><thead><tr><th>Depot</th><th>Roster</th><th>Used today</th><th>%</th><th>Ever used</th><th>Not used today</th></tr></thead><tbody id="rows"></tbody></table>
-<p class="note">Roster is active drivers in the driver PIN list. Used means start of day submitted on the date shown. Ever used means at least one start of day submitted since launch. Logins alone are not recorded.</p>
+<p class="note">Roster is active drivers in the driver PIN list. Used means start of day submitted on the date shown. Ever used means at least one start of day submitted since 26/10/2026. Management and staff logins are excluded. Logins alone are not recorded.</p>
 </main>
 <script>
 const URL_='https://eacaudjkppyhpsjzoakv.supabase.co/rest/v1/',KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhY2F1ZGprcHB5aHBzanpvYWt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1NDYwNzYsImV4cCI6MjA5ODEyMjA3Nn0.oxPp4xwKyt7MjeefQiC8zKApzwydlqst_GY1WyLVmxU';
+const EXCL=new Set(['lloyd bannister','wayne bannister','wayne jr bannister']),LAUNCH='2026-10-26';
 const H={apikey:KEY,Authorization:'Bearer '+KEY};
 async function q(p){const r=await fetch(URL_+p,{headers:H});if(!r.ok)throw new Error(r.status);return r.json();}
 function iso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
@@ -43,10 +44,10 @@ async function run(){
     const [pins,today,all]=await Promise.all([
       q('driver_pins?active=eq.true&select=driver_name,depot,client&limit=2000'),
       q('driver_shifts?shift_date=eq.'+day+'&select=driver_name,depot&limit=5000'),
-      q('driver_shifts?select=driver_name&limit=20000')]);
+      q('driver_shifts?shift_date=gte.'+LAUNCH+'&select=driver_name&limit=20000')]);
     const used=new Set(today.map(s=>s.driver_name)),ever=new Set(all.map(s=>s.driver_name));
     const by={};
-    pins.forEach(p=>{const k=p.depot||'Unknown';(by[k]=by[k]||[]).push(p.driver_name);});
+    pins.filter(p=>!EXCL.has(String(p.driver_name||'').toLowerCase())).forEach(p=>{const k=p.depot||'Unknown';(by[k]=by[k]||[]).push(p.driver_name);});
     let tr=0,tu=0,te=0,rows='';
     Object.keys(by).sort().forEach(dep=>{
       const L=by[dep],u=L.filter(n=>used.has(n)),e=L.filter(n=>ever.has(n)),out=L.filter(n=>!used.has(n));
