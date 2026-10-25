@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KBAN App Adoption</title>
+<style>
+:root{--navy:#0B2E4E;--blue:#2E83F0;--bg:#f0f4f8;--border:#d0d7de;--text:#1a1a2e;--muted:#6b7280;--green:#16a34a;--amber:#d97706;--red:#dc2626}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text)}
+header{background:var(--navy);color:#fff;padding:14px 16px}header h1{margin:0;font-size:18px}header p{margin:4px 0 0;font-size:12px;opacity:.8}
+main{max-width:900px;margin:0 auto;padding:16px}
+.bar{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.bar input,.bar button{font:inherit;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:#fff}
+.bar button{background:var(--blue);color:#fff;border:0;cursor:pointer}
+.big{background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px}
+.big .n{font-size:44px;font-weight:700;color:var(--navy)}.big .s{color:var(--muted);font-size:14px}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:14px}
+th,td{padding:9px 10px;text-align:left;font-size:14px;border-bottom:1px solid var(--border);vertical-align:top}
+th{background:#e8f2fe;color:var(--navy)}
+.pct{font-weight:700}.g{color:var(--green)}.a{color:var(--amber)}.r{color:var(--red)}
+.names{color:var(--muted);font-size:12px}
+.note{font-size:12px;color:var(--muted)}
+@media(max-width:600px){th,td{font-size:12px;padding:7px 6px}}
+</style>
+</head>
+<body>
+<header><h1>KBAN Driver App Adoption</h1><p id="stamp">Loading</p></header>
+<main>
+<div class="bar"><label>Date <input type="date" id="d"></label><button id="go">Refresh</button></div>
+<div class="big"><div class="n" id="head">-</div><div class="s" id="sub"></div></div>
+<table><thead><tr><th>Depot</th><th>Roster</th><th>Used today</th><th>%</th><th>Ever used</th><th>Not used today</th></tr></thead><tbody id="rows"></tbody></table>
+<p class="note">Roster is active drivers in the driver PIN list. Used means start of day submitted on the date shown. Ever used means at least one start of day submitted since launch. Logins alone are not recorded.</p>
+</main>
+<script>
+const URL_='https://eacaudjkppyhpsjzoakv.supabase.co/rest/v1/',KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhY2F1ZGprcHB5aHBzanpvYWt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1NDYwNzYsImV4cCI6MjA5ODEyMjA3Nn0.oxPp4xwKyt7MjeefQiC8zKApzwydlqst_GY1WyLVmxU';
+const H={apikey:KEY,Authorization:'Bearer '+KEY};
+async function q(p){const r=await fetch(URL_+p,{headers:H});if(!r.ok)throw new Error(r.status);return r.json();}
+function iso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+async function run(){
+  const day=document.getElementById('d').value;
+  try{
+    const [pins,today,all]=await Promise.all([
+      q('driver_pins?active=eq.true&select=driver_name,depot,client&limit=2000'),
+      q('driver_shifts?shift_date=eq.'+day+'&select=driver_name,depot&limit=5000'),
+      q('driver_shifts?select=driver_name&limit=20000')]);
+    const used=new Set(today.map(s=>s.driver_name)),ever=new Set(all.map(s=>s.driver_name));
+    const by={};
+    pins.forEach(p=>{const k=p.depot||'Unknown';(by[k]=by[k]||[]).push(p.driver_name);});
+    let tr=0,tu=0,te=0,rows='';
+    Object.keys(by).sort().forEach(dep=>{
+      const L=by[dep],u=L.filter(n=>used.has(n)),e=L.filter(n=>ever.has(n)),out=L.filter(n=>!used.has(n));
+      const pc=L.length?Math.round(u.length/L.length*100):0;tr+=L.length;tu+=u.length;te+=e.length;
+      rows+='<tr><td><b>'+esc(dep)+'</b></td><td>'+L.length+'</td><td>'+u.length+'</td><td class="pct '+(pc>=80?'g':pc>=40?'a':'r')+'">'+pc+'%</td><td>'+e.length+'</td><td class="names">'+esc(out.sort().join(', '))+'</td></tr>';
+    });
+    document.getElementById('rows').innerHTML=rows;
+    const pc=tr?Math.round(tu/tr*100):0;
+    document.getElementById('head').textContent=pc+'% using the app';
+    document.getElementById('sub').textContent=tu+' of '+tr+' drivers completed start of day. '+te+' have used it at least once.';
+    document.getElementById('stamp').textContent='Report for '+day.split('-').reverse().join('/')+', refreshed '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  }catch(e){document.getElementById('stamp').textContent='Could not load data ('+e.message+')';}
+}
+document.getElementById('d').value=iso(new Date());
+document.getElementById('go').onclick=run;document.getElementById('d').onchange=run;run();
+</script>
+</body>
+</html>
