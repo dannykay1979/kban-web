@@ -122,7 +122,7 @@ function validateRows(rows, wk, validNames) {
     if (r.status !== 'starter' && !valid.has(norm(r.name))) errs.push(who + ': not on the driver list for this depot. If they are new, choose New starter.');
     if (seen[norm(r.name)]) errs.push(who + ': listed twice.');
     seen[norm(r.name)] = true;
-    if (!r.route) errs.push(who + ': route or temp ID missing.');
+    if (!r.route) errs.push(who + ': route or ID missing.');
     if (!r.arrival) errs.push(who + ': planned arrival time missing.');
     if (!r.days.length) errs.push(who + ': no days selected.');
     if (r.status && !r.statusDate) errs.push(who + ': ' + (r.status === 'starter' ? 'first day' : 'last day') + ' missing.');
@@ -165,6 +165,13 @@ function nextMonday() {
 function dayBoxes(sel) {
   return '<div class="days">' + DAYS.map(d => '<label><input type="checkbox" data-day="' + d + '"' + (sel && sel.indexOf(d) >= 0 ? ' checked' : '') + '>' + d + '</label>').join('') + '</div>';
 }
+function routeLabel(depot) {
+  const d = String(depot || '').toUpperCase();
+  if (d.indexOf('DPD') === 0) return 'Route ID';
+  if (d.indexOf('FEDEX') === 0) return 'Route number';
+  if (d.indexOf('DHL') === 0) return 'Driver ID or temp ID';
+  return 'Route or ID';
+}
 function addRow(e) {
   e = e || {};
   const id = ++seq, depot = $('depot').value;
@@ -178,7 +185,7 @@ function addRow(e) {
   div.className = 'drv'; div.id = 'r' + id;
   div.innerHTML = '<label>Driver</label><select class="f-name">' + opts + '</select>' +
     '<input type="text" class="f-new' + (starterName ? '' : ' hide') + '" placeholder="Full name of the new starter" value="' + esc(starterName) + '" style="margin-top:8px">' +
-    '<div class="two"><div><label>Route / temp ID</label><input type="text" class="f-route" value="' + esc(e.route_id || e.temp_id || '') + '" autocapitalize="characters"></div>' +
+    '<div class="two"><div><label>' + routeLabel(depot) + '</label><input type="text" class="f-route" value="' + esc(e.route_id || e.temp_id || '') + '" autocapitalize="characters"></div>' +
     '<div><label>Planned arrival</label><input type="time" class="f-arr" value="' + esc(e.planned_arrival || '') + '"></div></div>' +
     '<label>Fuel card (KBAN number)</label><input type="text" class="f-card" value="' + esc(e.fuel_card || '') + '" placeholder="e.g. 21">' +
     '<label>Days working</label>' + dayBoxes(e.operating_days) +
