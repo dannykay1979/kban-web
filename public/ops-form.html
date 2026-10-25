@@ -312,19 +312,20 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
         </div>
         <div class="f">
           <label>Week Starting <span class="r">*</span></label>
-          <input type="date" id="p-week">
+          <input type="date" id="p-week" onchange="onPlanDepotChange()">
           <div class="hint">Select the Monday</div>
         </div>
       </div>
       <div class="f">
         <label>Set By</label>
-        <select id="p-setby">
+        <select id="p-setby" onchange="planDraftSave()">
           <option value="">Select...</option>
           <option>Wayne Bannister</option>
           <option>Jack Gardiner</option>
         </select>
       </div>
       <div id="existing-plan-note"></div>
+      <div id="plan-draft-note" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
     </div>
   </div>
 
@@ -1173,16 +1174,75 @@ function resetDaily() {
   });
 }
 
-async function onPlanDepotChange() {
+// ── WEEKLY PLAN AUTO SAVE (browser draft, cleared once the plan is saved) ──
+function planKey() {
+  const d = document.getElementById('p-depot').value, w = document.getElementById('p-week').value;
+  return d && w ? 'kban_plan_draft|' + d + '|' + w : '';
+}
+function planCollect() {
+  const isDHL = document.getElementById('p-depot').value.startsWith('DHL');
+  const out = [];
+  document.querySelectorAll('#plan-driver-list .plan-row').forEach(row => {
+    const n = row.id.replace('pd-','');
+    out.push({
+      name: document.getElementById('pd-'+n+'-name')?.value.trim()||'',
+      planned_arrival: document.getElementById('pd-'+n+'-arr')?.value||'',
+      fuel_card: document.getElementById('pd-'+n+'-card')?.value.trim()||'',
+      [isDHL?'temp_id':'route_id']: document.getElementById('pd-'+n+'-rid')?.value.trim()||'',
+      operating_days: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].filter(d => document.getElementById('pd-'+n+'-day-'+d)?.className.includes('yes')),
+    });
+  });
+  return out;
+}
+let planDraftTimer = null, planRestoring = false;
+function planDraftSave() {
+  if (planRestoring) return;
+  const key = planKey(); if (!key) return;
+  try {
+    const drivers = planCollect();
+    if (!drivers.length) { localStorage.removeItem(key); document.getElementById('plan-draft-note').textContent = ''; return; }
+    localStorage.setItem(key, JSON.stringify({ setby: document.getElementById('p-setby').value, drivers, ts: Date.now() }));
+    localStorage.setItem('kban_plan_last', key);
+    const t = new Date().toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'});
+    document.getElementById('plan-draft-note').textContent = '\u2713 Draft auto saved on this device at ' + t + ' (' + drivers.length + ' driver' + (drivers.length === 1 ? '' : 's') + '). Press Save Weekly Plan when finished.';
+  } catch(e) {}
+}
+function planDraftQueue() { clearTimeout(planDraftTimer); planDraftTimer = setTimeout(planDraftSave, 400); }
+function planDraftClear() {
+  try { const k = planKey(); if (k) localStorage.removeItem(k); localStorage.removeItem('kban_plan_last'); } catch(e) {}
+  document.getElementById('plan-draft-note').textContent = '';
+}
+function planDraftDiscard() {
+  planDraftClear();
+  document.getElementById('plan-driver-list').innerHTML = ''; planDriverN = 0;
+  onPlanDepotChange(true);
+}
+function planRemoveRow(n) { document.getElementById('pd-' + n).remove(); planDraftSave(); }
+document.addEventListener('input', e => { if (e.target.closest && e.target.closest('#screen-plan')) planDraftQueue(); });
+window.addEventListener('pagehide', planDraftSave);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') planDraftSave(); });
+
+async function onPlanDepotChange(skipDraft) {
   const depot = document.getElementById('p-depot').value;
   const week  = document.getElementById('p-week').value;
   if (!depot || !week) return;
   if (depot.startsWith('DHL')) document.getElementById('p-setby').value = 'Wayne Bannister';
   if (depot.startsWith('DPD')) document.getElementById('p-setby').value = 'Jack Gardiner';
+  const noteEl = document.getElementById('existing-plan-note');
+  planRestoring = true;
   try {
+    let draft = null;
+    if (skipDraft !== true) { try { draft = JSON.parse(localStorage.getItem(planKey()) || 'null'); } catch(e) {} }
+    if (draft && draft.drivers && draft.drivers.length) {
+      document.getElementById('plan-driver-list').innerHTML = ''; planDriverN = 0;
+      draft.drivers.forEach(d => addPlanDriver(d));
+      if (draft.setby) document.getElementById('p-setby').value = draft.setby;
+      const t = new Date(draft.ts).toLocaleString('en-GB', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
+      noteEl.innerHTML = '<div class="alert alert-warn" style="margin-top:10px">\u26A0 Unsaved draft restored (' + draft.drivers.length + ' driver' + (draft.drivers.length === 1 ? '' : 's') + ', last edited ' + t + '). Press Save Weekly Plan to keep it. <a href="#" onclick="planDraftDiscard();return false;" style="color:inherit;font-weight:700">Discard draft</a></div>';
+      return;
+    }
     const rows = await sbFetch(`depot_weekly_plan?depot=eq.${encodeURIComponent(depot)}&week_start=eq.${week}&select=*`);
     const existing = rows && rows.length > 0 ? rows[0] : null;
-    const noteEl = document.getElementById('existing-plan-note');
     if (existing) {
       noteEl.innerHTML = `<div class="alert alert-warn" style="margin-top:10px">⚠ A plan already exists for this depot and week (set by ${existing.set_by}). Saving will overwrite it.</div>`;
       document.getElementById('plan-driver-list').innerHTML = '';
@@ -1190,6 +1250,7 @@ async function onPlanDepotChange() {
       existing.drivers.forEach(d => addPlanDriver(d));
     } else { noteEl.innerHTML = ''; }
   } catch(e) { }
+  finally { planRestoring = false; planDraftSave(); }
 }
 
 function addPlanDriver(prefill={}) {
@@ -1203,7 +1264,7 @@ function addPlanDriver(prefill={}) {
   div.innerHTML = `
     <div class="plan-row-head">
       <div><div class="pname" id="pd-${n}-prev">${prefill.name||'New Driver'}</div><div class="pmeta">Click to expand</div></div>
-      <button class="rm" onclick="document.getElementById('pd-${n}').remove()">×</button>
+      <button class="rm" onclick="planRemoveRow(${n})">×</button>
     </div>
     <div class="plan-row-body">
       <div class="r2">
@@ -1222,11 +1283,13 @@ function addPlanDriver(prefill={}) {
       </div>
     </div>`;
   document.getElementById('plan-driver-list').appendChild(div);
+  if (!planRestoring) planDraftSave();
 }
 
 function toggleDay(pfx, day) {
   const btn = document.getElementById(pfx + '-day-' + day);
   btn.className = btn.className.includes('yes') ? 'yb' : 'yb yes';
+  if (pfx.indexOf('pd-') === 0) planDraftSave();
 }
 
 async function savePlan() {
@@ -1257,6 +1320,7 @@ async function savePlan() {
       prefer: 'resolution=merge-duplicates,return=representation',
       body: JSON.stringify({ depot, week_start: week, set_by: setby||'Unknown', drivers }),
     });
+    planDraftClear();
     hideLoading();
     document.getElementById('existing-plan-note').innerHTML = `<div class="alert alert-ok" style="margin-top:10px">✓ Plan saved for ${depot}, week of ${week}.</div>`;
   } catch(e) {
@@ -1810,6 +1874,14 @@ async function sendWelcome() {
 }
 function mgName(n) { return n; }
 fillPin();
+// Restore the last Weekly Plan draft after a refresh or the page being closed
+(function(){ try {
+  const k = localStorage.getItem('kban_plan_last'); if (!k) return;
+  const parts = k.split('|'); if (parts.length !== 3) return;
+  document.getElementById('p-depot').value = parts[1];
+  document.getElementById('p-week').value = parts[2];
+  onPlanDepotChange();
+} catch(e) {} })();
 
 async function toggleDriver(id, currentlyActive) {
   try {
