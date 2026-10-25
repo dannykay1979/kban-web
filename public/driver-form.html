@@ -272,9 +272,9 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <div class="ch"><h2>Route &amp; Timing</h2></div>
     <div class="cb">
       <div class="f">
-        <label>Today's Route / Temp ID <span class="r">*</span></label>
+        <label id="sod-id-label">Today's Route / Temp ID <span class="r">*</span></label>
         <input type="text" id="sod-route-id" placeholder="e.g. FD72579 or MD Temp 4" autocomplete="off" autocapitalize="characters" oninput="this.value=this.value.toUpperCase()">
-        <div class="hint">Enter the ID on your card today — permanent or temp</div>
+        <div class="hint" id="sod-id-hint">Enter the ID on your card today — permanent or temp</div>
       </div>
       <div class="f">
         <label>Fuel Card (KBAN number) <span class="r">*</span></label>
@@ -673,6 +673,7 @@ async function attemptLogin() {
 
     const driver = rows[0];
     currentDriver = { id: driver.driver_id || null, name: driver.driver_name, depot: driver.depot, client: driver.client };
+    setIdLabels(driver.client);
 
     // Check for existing shift today
     const todayStr = today.toISOString().split('T')[0];
@@ -700,6 +701,20 @@ async function attemptLogin() {
     clearPin();
     showErr('Could not verify. Check your connection and try again.');
   }
+}
+
+function idInfo(client) {
+  const c = String(client || '').toUpperCase();
+  if (c === 'DPD') return { label: 'Route ID', ph: 'e.g. FD72579', hint: 'Your DPD route ID for today, as shown on your card' };
+  if (c.indexOf('FEDEX') === 0) return { label: 'Route number', ph: 'e.g. 12', hint: 'Your FedEx route number for today' };
+  if (c === 'DHL') return { label: 'Driver ID or temp ID', ph: 'e.g. MD Temp 4', hint: 'Your DHL driver ID. If you are on a temp ID today, enter the temp ID instead' };
+  return { label: 'Route or ID', ph: '', hint: 'Enter the route or ID you are working today' };
+}
+function setIdLabels(client) {
+  const i = idInfo(client);
+  document.getElementById('sod-id-label').innerHTML = 'Today\'s ' + i.label + ' <span class="r">*</span>';
+  document.getElementById('sod-id-hint').textContent = i.hint;
+  if (i.ph) document.getElementById('sod-route-id').placeholder = i.ph;
 }
 
 // ── Day type grid ─────────────────────────────────────────────────────────
@@ -739,7 +754,7 @@ if (dayType === 'standard' && !(currentVehicleCheck && currentVehicleCheck.id)) 
     const startMileage  = document.getElementById('sod-start-mileage').value;
     const deliveryDrops = document.getElementById('sod-delivery-drops').value;
 
-    if (!routeId)       return showErr('Please enter your route/temp ID for today.');
+    if (!routeId)       return showErr('Please enter your route or ID for today.');
     const noFuelCard = document.getElementById('sod-no-fuel-card').checked;
     const fuelCardRaw = document.getElementById('sod-fuel-card').value.trim();
     if (!noFuelCard && !fuelCardRaw) return showErr('Please enter your fuel card number, or tick No fuel card today.');
@@ -823,7 +838,7 @@ function renderWaitingScreen() {
   html += `<strong>Depot</strong>${s.depot}`;
   html += `<strong>Day Type</strong>${DAY_TYPES.find(t=>t.key===s.day_type)?.label || s.day_type}`;
   if (s.day_type === 'standard') {
-    if (s.reported_id)            html += `<strong>Today's Route/Temp ID</strong>${s.reported_id}`;
+    if (s.reported_id)            html += `<strong>${idInfo(currentDriver.client).label}</strong>${s.reported_id}`;
     if (s.time_at_depot)          html += `<strong>Arrived at Depot</strong>${s.time_at_depot}`;
     if (s.delivery_drops_planned) html += `<strong>Delivery Drops Declared</strong>${s.delivery_drops_planned}`;
 if (s.parcel_count) html += '<strong>Parcels Declared</strong>' + s.parcel_count;
