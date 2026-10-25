@@ -81,7 +81,7 @@ module.exports = async (req, res) => {
       body: JSON.stringify({
         from: 'KBAN Ops <ops@send.kbanlogistics.co.uk>',
         to: [email],
-        cc: [mgr.email],
+        cc: (b.noCc && /^daniel@/i.test(String(user.email))) ? [] : [mgr.email],
         reply_to: mgr.email,
         subject: 'KBAN Driver App: your login and start guide',
         html,
