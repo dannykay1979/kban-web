@@ -1775,37 +1775,38 @@ function fillPin() {
 }
 function mgEsc(t) { return String(t==null?'':t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function showWelcome(name, depot, email, pin) {
-  const dpd = depot.startsWith('DPD'), dhl = depot.startsWith('DHL');
-  const mgrName = dpd ? 'Paul' : 'Wayne';
-  const mgrMail = dpd ? 'paul@kbanlogistics.co.uk' : 'WayneJnr@kbanlogistics.co.uk';
-  const idWord = dpd ? 'route ID' : (dhl ? 'driver ID or temp ID' : 'route number');
-  const first = name.split(' ')[0];
-  const subject = 'KBAN Driver App: your login and start guide';
-  const body = 'Hi ' + first + ',\n\n' +
-    'We are moving all start of day, vehicle check and end of day reporting into the KBAN driver app. Everything you need is below. Please read it through and get set up before your first shift.\n\n' +
-    '1. Your login\n' +
-    '   Start guide and video: https://kban-web.vercel.app/driver-start.html\n' +
-    '   Depot: ' + depot + '\n' +
-    '   Your personal PIN: ' + pin + '\n' +
-    '   Please do not share your PIN with anyone.\n\n' +
-    '2. Save it to your phone\n' +
-    '   The start guide shows how to add the app to your home screen on iPhone and Android.\n\n' +
-    '3. Before your first shift\n' +
-    '   Watch the video on the start guide page. It is under 2 minutes.\n' +
-    '   Log in and complete your start of day and vehicle check with photos before you leave the depot.\n' +
-    '   Complete end of day when you return.\n' +
-    '   Enter your ' + idWord + ' when the app asks for it.\n\n' +
-    '4. Wise\n' +
-    '   Please also check your Wise profile is complete and your documents are up to date.\n\n' +
-    'If anything does not work, reply to this email or speak to ' + mgName(mgrName) + ' and we will sort it the same day. Please reply to confirm you have received this and can log in.\n\n' +
-    'Kind regards,\nDanny\nKBAN Logistics';
-  const href = 'mailto:' + encodeURIComponent(email||'') + '?cc=' + encodeURIComponent(mgrMail) + '&subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+  const mgrName = depot.startsWith('DPD') ? 'Paul' : 'Wayne';
+  window.__welcome = { name: name, email: email, logins: [{ depot: depot, pin: pin }], isNew: true };
   document.getElementById('mg-result').innerHTML =
     '<div style="background:var(--gbg);border:1px solid #86efac;border-radius:10px;padding:12px 14px;margin-bottom:12px;">' +
     '<div style="font-weight:700;color:var(--green);margin-bottom:4px;">' + mgEsc(name) + ' added to ' + mgEsc(depot) + '</div>' +
     '<div style="font-size:13px;color:var(--text);margin-bottom:8px;">PIN: <b style="font-size:18px;letter-spacing:2px;">' + mgEsc(pin) + '</b>. This is the only time it is shown, so send the welcome email now.</div>' +
-    (email ? '<a href="' + href + '" style="display:inline-block;background:var(--blue);color:#fff;text-decoration:none;font-weight:600;padding:10px 14px;border-radius:8px;font-size:14px;">Open welcome email (Cc ' + mgEsc(mgrName) + ')</a>' : '<div style="font-size:12px;color:var(--amber);">No email address was entered, so the welcome email cannot be drafted. Give the PIN to the driver directly.</div>') +
+    (email
+      ? '<button type="button" id="mg-send" onclick="sendWelcome()" style="background:var(--blue);color:#fff;border:none;font-weight:600;padding:10px 14px;border-radius:8px;font-size:14px;cursor:pointer;">Send welcome email from KBAN Ops (Cc ' + mgEsc(mgrName) + ')</button><div id="mg-send-status" style="font-size:13px;margin-top:8px;"></div>'
+      : '<div style="font-size:12px;color:var(--amber);">No email address was entered, so the welcome email cannot be sent. Give the PIN to the driver directly.</div>') +
     '</div>';
+}
+async function sendWelcome() {
+  const btn = document.getElementById('mg-send'), st = document.getElementById('mg-send-status');
+  if (!window.__welcome) return;
+  btn.disabled = true; btn.textContent = 'Sending...'; st.textContent = '';
+  try {
+    const { data: { session } } = await _sb.auth.getSession();
+    const r = await fetch('/api/send-welcome', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (session ? session.access_token : '') },
+      body: JSON.stringify(window.__welcome)
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'Send failed (' + r.status + ')');
+    btn.style.display = 'none';
+    st.style.color = 'var(--green)';
+    st.textContent = 'Sent to ' + window.__welcome.email + ' from KBAN Ops, copied to ' + j.cc + '.';
+  } catch (e) {
+    btn.disabled = false; btn.textContent = 'Try again';
+    st.style.color = 'var(--red)';
+    st.textContent = e.message;
+  }
 }
 function mgName(n) { return n; }
 fillPin();
