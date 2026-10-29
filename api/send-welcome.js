@@ -92,13 +92,17 @@ module.exports = async (req, res) => {
       '<img src="https://kban-web.vercel.app/kban-logo.jpg" alt="KBAN Logistics" height="48" style="display:block;margin-bottom:12px;">' +
       body + '</div>';
 
+    // Default: copy the manager. Optional override: a list of KBAN addresses (an empty list means no copy).
+    let ccList = (b.noCc && /^daniel@/i.test(String(user.email))) ? [] : [mgr.email];
+    if (Array.isArray(b.cc)) ccList = b.cc.map(String).filter(a => /^[^\s@]+@kbanlogistics\.co\.uk$/i.test(a)).slice(0, 5);
+
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + process.env.RESEND_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         from: 'KBAN Ops <ops@send.kbanlogistics.co.uk>',
         to: [email],
-        cc: (b.noCc && /^daniel@/i.test(String(user.email))) ? [] : [mgr.email],
+        cc: ccList,
         reply_to: mgr.email,
         subject: 'KBAN Driver App: your login and start guide',
         html,
