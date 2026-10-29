@@ -38,7 +38,7 @@ module.exports = async (req, res) => {
 
     const first = name.split(/\s+/)[0];
     const mgr = managerFor(logins[0].depot);
-    const shift = b.isNew ? 'first shift' : 'next shift';
+    const roll = !!b.rollout;
     const idWords = [...new Set(logins.map(l => idWordFor(l.depot)))];
     const idLine = logins.length > 1
       ? 'Enter your ' + idWords.join(' or ') + ' (depending on the depot you are working at) when the app asks for it.'
@@ -49,26 +49,43 @@ module.exports = async (req, res) => {
       : '<li>You work at more than one depot. Choose the depot you are working at that day.</li>' +
         logins.map(l => '<li>' + esc(l.depot) + ' PIN: <strong style="font-size:16px;letter-spacing:1px;">' + esc(l.pin) + '</strong></li>').join('');
 
-    const sec = (n, t) => '<p style="margin:16px 0 4px;"><strong>' + n + '. ' + t + '</strong></p>';
+    let n = 0;
+    const sec = t => '<p style="margin:16px 0 4px;"><strong>' + (++n) + '. ' + t + '</strong></p>';
     const ul = lis => '<ul style="margin:0 0 8px 18px;padding:0;">' + lis.map(i => '<li style="margin:3px 0;">' + i + '</li>').join('') + '</ul>';
 
     let body = '';
     body += '<p>Hi ' + esc(first) + ',</p>';
-    body += '<p>We are moving all start of day, vehicle check and end of day reporting into the KBAN driver app. Everything you need is below. Please read it through and get set up before your ' + shift + '.</p>';
-    body += sec(1, 'Your login') + '<ul style="margin:0 0 8px 18px;padding:0;"><li style="margin:3px 0;">Start guide and video: <a href="https://kban-web.vercel.app/driver-start.html">https://kban-web.vercel.app/driver-start.html</a></li>' +
+    body += roll
+      ? '<p>From Monday 02/11/2026 we are moving all start of day, vehicle check and end of day reporting into the new KBAN driver app. This email is an early heads up with everything you need to get set up. Please read it all the way through.</p>'
+      : '<p>We are moving all start of day, vehicle check and end of day reporting into the new KBAN driver app. This email has everything you need to get set up. Please read it all the way through.</p>';
+    body += sec('Your login') + '<ul style="margin:0 0 8px 18px;padding:0;"><li style="margin:3px 0;">Start guide and video: <a href="https://kban-web.vercel.app/driver-start.html">https://kban-web.vercel.app/driver-start.html</a></li>' +
       loginLis.replace(/<li>/g, '<li style="margin:3px 0;">') + '<li style="margin:3px 0;">Please do not share your PIN with anyone.</li></ul>';
-    body += sec(2, 'Save it to your phone') + ul(['The start guide shows how to add the app to your home screen on iPhone and Android.', 'It takes under a minute and means you can open it like any other app.']);
-    body += sec(3, 'Before your ' + shift) + ul([
+    body += sec('Save it to your phone') + ul(['The start guide shows how to add the app to your home screen on iPhone and Android.', 'It takes under a minute.']);
+    body += sec('Get set up now') + ul([
       'Watch the video on the start guide page. It is under 2 minutes.',
-      'Log in and complete your start of day and vehicle check with photos before you leave the depot.',
-      'Complete end of day when you return.',
+      'Log in once to check your PIN works.',
       esc(idLine)
     ]);
-    body += sec(4, 'Wise') + ul(['Please also check your Wise profile is complete and your documents are up to date.']);
-    if (b.rollout) {
-      body += sec(5, 'Dates') + ul(['Please start using the app from Tuesday 27/10/2026.', 'From Monday 02/11/2026 we expect everyone to be using it every working day.']);
-    }
-    body += '<p style="margin-top:16px;">If anything does not work, reply to this email or speak to ' + mgr.name + ' and we will sort it the same day. Please reply to confirm you have received this and can log in.</p>';
+    body += sec(roll ? 'From Monday 02/11/2026' : 'Every working day') + ul([
+      'Complete your start of day, vehicle check and end of day in the app every working day.',
+      'While the app is in its early stages, please also keep sending your start and end of day updates to your depot group as you do now.',
+      'Please do both until we confirm that the group updates can stop.'
+    ]);
+    body += sec('Vehicle check photos') + ul([
+      '6 photos are required on every check, no exceptions.',
+      'All photos must be clear.',
+      'A compliance check is carried out on these.',
+      'They protect you against any claim for new damage.'
+    ]);
+    body += sec('Complete every step in full') + ul([
+      'The systems we are adding link into our payroll process to make it more efficient and accurate.',
+      'Missing information affects the timing and accuracy of your payments.'
+    ]);
+    body += sec('Any issues') + ul([
+      'This mailbox does not receive replies, so please do not reply to this email.',
+      'Speak to your lead driver, Paul Roberts, Wayne Bannister or Wayne Bannister Jnr to log any issue and we will get it resolved.'
+    ]);
+    body += '<p style="margin-top:16px;">Thanks for your support.</p>';
     body += '<p>Kind regards,<br>KBAN Ops<br>KBAN Logistics</p>';
 
     const html = '<div style="font-family:Arial,sans-serif;font-size:14px;color:#1b2430;max-width:600px;">' +
