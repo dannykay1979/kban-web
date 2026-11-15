@@ -67,8 +67,8 @@ function render(){
   const done = real.filter(r=>r.submitted_at).length, opened = real.filter(r=>!r.submitted_at && r.opened_at).length, none = real.length-done-opened;
   const body = rows.map(r=>{
     const st = status(r);
-    const plan = (r.load_plan||[]).slice().sort((a,b)=>a.order-b.order);
-    const planHtml = plan.length ? '<details><summary>Load plan</summary><div class="plan">'+plan.map(p=>esc(p.order)+'. <b>'+esc(p.sector)+'</b> position '+esc(p.position)).join('<br>')+(r.notes?'<br><i>Notes: '+esc(r.notes)+'</i>':'')+'</div></details>' : '';
+    const plan = (r.load_plan||[]).slice().sort((a,b)=>a.position-b.position);
+    const planHtml = plan.length ? '<details><summary>Load plan</summary><div class="plan">'+plan.map(p=>'<b>'+esc(p.sector)+'</b> position '+esc(p.position)).join('<br>')+(r.notes?'<br><i>Notes: '+esc(r.notes)+'</i>':'')+'</div></details>' : '';
     return '<tr><td><b>'+(r.route>=900?'TEST':esc(r.route))+'</b></td><td>'+esc(r.driver_name)+'<div class="muted hide-sm">'+esc(r.email||'')+'</div></td>'
       +'<td><span class="pill '+st+'">'+(st==='done'?'Submitted':st==='opened'?'Opened, not submitted':'Not opened')+'</span></td>'
       +'<td class="hide-sm">'+when(r.opened_at)+'</td><td>'+when(r.submitted_at)+(r.revisions>1?'<div class="muted">Changed '+(r.revisions-1)+'x</div>':'')+planHtml+'</td>'
@@ -85,8 +85,8 @@ function render(){
   });
   document.getElementById('csv').addEventListener('click',()=>{
     const q = v => '"'+String(v==null?'':v).replace(/"/g,'""')+'"';
-    const head = ['Route','Driver','Status','Opened','Submitted','Load plan (order:sector:position)','Notes'];
-    const lines = rows.map(r=>[r.route,r.driver_name,status(r),r.opened_at||'',r.submitted_at||'',(r.load_plan||[]).slice().sort((a,b)=>a.order-b.order).map(p=>p.order+':'+p.sector+':'+p.position).join(' | '),r.notes||''].map(q).join(','));
+    const head = ['Route','Driver','Status','Opened','Submitted','Load plan (sector:position)','Notes'];
+    const lines = rows.map(r=>[r.route,r.driver_name,status(r),r.opened_at||'',r.submitted_at||'',(r.load_plan||[]).slice().sort((a,b)=>a.position-b.position).map(p=>p.sector+':'+p.position).join(' | '),r.notes||''].map(q).join(','));
     copy([head.map(q).join(',')].concat(lines).join('\n'),'CSV copied');
   });
 }

@@ -89,15 +89,12 @@ async function load(){
 function renderForm(){
   const prev = {}; (R.load_plan||[]).forEach(p => prev[p.sector] = p);
   const n = R.sectors.length;
-  const orderOpts = sel => '<option value="">Choose</option>' + Array.from({length:n},(_,i)=>'<option value="'+(i+1)+'"'+(String(sel)===String(i+1)?' selected':'')+'>'+(i+1)+(i===0?' (first)':i===n-1?' (last)':'')+'</option>').join('');
   const sectorsHtml = R.sectors.map((s,i) => {
     const pv = prev[s.sector] || {};
     return '<div class="sector" data-sector="'+esc(s.sector)+'">'
       +'<div class="head"><b>'+esc(s.sector)+'</b><span>about '+esc(s.stops)+' stops a day</span></div>'
       +'<div class="lbl">Load position</div>'
       +'<div class="pos4">'+[1,2,3,4].map(p=>'<span><input type="radio" name="pos'+i+'" id="p'+i+'_'+p+'" value="'+p+'"'+(pv.position===p?' checked':'')+'><label for="p'+i+'_'+p+'">'+p+'</label></span>').join('')+'</div>'
-      +'<div class="lbl">Your drop order for this sector (1 to '+n+')</div>'
-      +'<select name="ord'+i+'">'+orderOpts(pv.order)+'</select>'
       +'</div>';
   }).join('');
   $('state').innerHTML =
@@ -110,14 +107,14 @@ function renderForm(){
    +'<p>Please read your driver pack (PDF attached to the email) first. Then complete the two sections below and submit. It takes about five minutes.</p>'
    +'<h2>1. How you want your van loaded</h2>'
    +'<div class="van"><div class="vanbox"><div class="cab">CAB</div><div class="pos">1</div><div class="pos">2</div><div class="pos">3</div><div class="pos">4</div><div class="rear">REAR DOORS</div></div>'
-   +'<ul class="how"><li>Position 1 is nearest the cab. Position 4 is nearest the rear doors.</li><li>Choose a position for every postcode sector on your route.</li><li>More than one sector can share a position.</li><li>Then put your sectors in the order you want to drop them, 1 to '+n+'. Each number can only be used once.</li></ul></div>'
+   +'<ul class="how"><li>Position 1 is nearest the cab. Position 4 is nearest the rear doors.</li><li>Choose a position for every postcode sector on your route.</li><li>More than one sector can share a position.</li></ul></div>'
    +sectorsHtml
    +'<div class="err-inline" id="planErr"></div>'
    +'<div class="lbl">Anything else about how you want your freight loaded or presented (optional)</div>'
    +'<textarea id="notes" maxlength="1000">'+esc(R.notes||'')+'</textarea>'
    +'<h2>2. Confirmation</h2>'
    +'<div class="chk"><input type="checkbox" id="a1"><label for="a1">I have read my driver pack and I understand my route, my postcode sectors and my start time.</label></div>'
-   +'<div class="chk"><input type="checkbox" id="a2"><label for="a2">I have chosen my load positions and drop order above.</label></div>'
+   +'<div class="chk"><input type="checkbox" id="a2"><label for="a2">I have chosen my load positions above.</label></div>'
    +'<div class="chk"><input type="checkbox" id="a3"><label for="a3">I understand I am responsible for all deliveries and collections on my route, including ad hoc collections, collection windows and the cut off times in my pack.</label></div>'
    +'<div class="lbl">Type your full name to sign</div>'
    +'<input type="text" id="signed" autocomplete="name" placeholder="Full name" value="'+esc(R.signed_name||'')+'">'
@@ -128,16 +125,12 @@ function renderForm(){
 }
 
 function collect(){
-  const plan = []; const orders = new Set(); let problem = '';
+  const plan = []; let problem = '';
   document.querySelectorAll('.sector').forEach((el,i)=>{
     const sector = el.dataset.sector;
     const pos = el.querySelector('input[type=radio]:checked');
-    const ord = el.querySelector('select').value;
     if(!pos) problem = problem || 'Choose a load position for '+sector+'.';
-    else if(!ord) problem = problem || 'Choose a drop order for '+sector+'.';
-    else if(orders.has(ord)) problem = problem || 'Each drop order number can only be used once. Check '+sector+'.';
-    orders.add(ord);
-    plan.push({sector, position: pos?Number(pos.value):null, order: ord?Number(ord):null});
+    plan.push({sector, position: pos?Number(pos.value):null});
   });
   return {plan, problem};
 }
@@ -162,12 +155,12 @@ async function submit(){
 }
 
 function renderDone(justNow){
-  const rows = (R.load_plan||[]).slice().sort((a,b)=>a.order-b.order).map(p=>'<tr><td>'+esc(p.order)+'</td><td><b>'+esc(p.sector)+'</b></td><td>Position '+esc(p.position)+'</td></tr>').join('');
+  const rows = (R.load_plan||[]).slice().sort((a,b)=>a.position-b.position).map(p=>'<tr><td><b>'+esc(p.sector)+'</b></td><td>Position '+esc(p.position)+'</td></tr>').join('');
   $('state').innerHTML =
     '<h1>Route '+esc(R.route)+'</h1><p class="sub">'+esc(R.driver_name)+'</p>'
    +'<div class="msg ok"><b>Thank you. Your confirmation has been received.</b><br>Submitted '+esc(ukDate(R.submitted_at))+'. Signed: '+esc(R.signed_name)+'.</div>'
    +'<h2>Your load plan</h2>'
-   +'<table><tr><th>Drop order</th><th>Sector</th><th>Van position</th></tr>'+rows+'</table>'
+   +'<table><tr><th>Sector</th><th>Van position</th></tr>'+rows+'</table>'
    +(R.notes?'<p><b>Your notes:</b> '+esc(R.notes)+'</p>':'')
    +'<p>Start: <b>23/11/2026</b>, '+esc(R.wave)+' wave. Report to Junior at the bay each day.</p>'
    +'<button class="alt" id="edit">Change my answers</button>'
