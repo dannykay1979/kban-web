@@ -74,6 +74,7 @@ const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&l
 const ukDate = iso => { if(!iso) return ''; const d=new Date(iso); return d.toLocaleDateString('en-GB')+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}); };
 const ukDay = iso => iso ? iso.split('-').reverse().join('/') : '';
 let R = null;
+const departBy = w => { const m=/^(\d{1,2}):(\d{2})$/.exec(w||''); if(!m) return ''; const t=Number(m[1])*60+Number(m[2])+60; return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0'); };
 
 function fail(text){ $('state').innerHTML = '<div class="msg err">'+esc(text)+'</div>'; }
 
@@ -101,9 +102,10 @@ function renderForm(){
     '<h1>Route '+esc(R.route)+'</h1><p class="sub">'+esc(R.driver_name)+'</p>'
    +'<div class="facts">'
    +'<div class="fact"><small>Start date</small><b>23/11/2026</b></div>'
-   +'<div class="fact"><small>Start time (wave)</small><b>'+esc(R.wave)+'</b></div>'
-   +'<div class="fact"><small>Area</small><b>'+esc(R.area)+'</b></div>'
-   +'<div class="fact"><small>Return by</small><b>'+esc(ukDay(R.return_by))+'</b></div></div>'
+   +'<div class="fact"><small>On bay by (wave)</small><b>'+esc(R.wave)+'</b></div>'
+   +'<div class="fact"><small>Depart by</small><b>'+esc(departBy(R.wave))+'</b></div>'
+   +'<div class="fact"><small>Return form by</small><b>'+esc(ukDay(R.return_by))+'</b></div>'
+   +'<div class="fact" style="grid-column:1/3"><small>Area</small><b>'+esc(R.area)+'</b></div></div>'
    +'<p>Please read your driver pack (PDF attached to the email) first. Then complete the two sections below and submit. It takes about five minutes.</p>'
    +'<h2>1. How you want your van loaded</h2>'
    +'<div class="van"><div class="vanbox"><div class="cab">CAB</div><div class="pos">1</div><div class="pos">2</div><div class="pos">3</div><div class="pos">4</div><div class="rear">REAR DOORS</div></div>'
@@ -162,7 +164,7 @@ function renderDone(justNow){
    +'<h2>Your load plan</h2>'
    +'<table><tr><th>Sector</th><th>Van position</th></tr>'+rows+'</table>'
    +(R.notes?'<p><b>Your notes:</b> '+esc(R.notes)+'</p>':'')
-   +'<p>Start: <b>23/11/2026</b>, '+esc(R.wave)+' wave. Report to Junior at the bay each day.</p>'
+   +'<p>Start: <b>23/11/2026</b>. On bay by <b>'+esc(R.wave)+'</b>, depart by <b>'+esc(departBy(R.wave))+'</b>. Report to Junior at the bay each day.</p>'
    +'<button class="alt" id="edit">Change my answers</button>'
    +'<p class="foot">KBAN Logistics Ltd.</p>';
   $('edit').addEventListener('click', ()=>{ R.submitted_at=null; renderForm(); window.scrollTo(0,0); });
