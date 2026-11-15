@@ -63,23 +63,24 @@ async function refresh(){
 }
 function status(r){ return r.submitted_at ? 'done' : r.opened_at ? 'opened' : 'none'; }
 function render(){
-  const done = rows.filter(r=>r.submitted_at).length, opened = rows.filter(r=>!r.submitted_at && r.opened_at).length, none = rows.length-done-opened;
+  const real = rows.filter(r=>r.route<900);
+  const done = real.filter(r=>r.submitted_at).length, opened = real.filter(r=>!r.submitted_at && r.opened_at).length, none = real.length-done-opened;
   const body = rows.map(r=>{
     const st = status(r);
     const plan = (r.load_plan||[]).slice().sort((a,b)=>a.order-b.order);
     const planHtml = plan.length ? '<details><summary>Load plan</summary><div class="plan">'+plan.map(p=>esc(p.order)+'. <b>'+esc(p.sector)+'</b> position '+esc(p.position)).join('<br>')+(r.notes?'<br><i>Notes: '+esc(r.notes)+'</i>':'')+'</div></details>' : '';
-    return '<tr><td><b>'+esc(r.route)+'</b></td><td>'+esc(r.driver_name)+'<div class="muted hide-sm">'+esc(r.email||'')+'</div></td>'
+    return '<tr><td><b>'+(r.route>=900?'TEST':esc(r.route))+'</b></td><td>'+esc(r.driver_name)+'<div class="muted hide-sm">'+esc(r.email||'')+'</div></td>'
       +'<td><span class="pill '+st+'">'+(st==='done'?'Submitted':st==='opened'?'Opened, not submitted':'Not opened')+'</span></td>'
       +'<td class="hide-sm">'+when(r.opened_at)+'</td><td>'+when(r.submitted_at)+(r.revisions>1?'<div class="muted">Changed '+(r.revisions-1)+'x</div>':'')+planHtml+'</td>'
       +'<td><button class="alt" data-copy="'+esc(r.token)+'">Copy link</button></td></tr>';
   }).join('');
   document.getElementById('app').innerHTML =
-    '<div class="cards"><div class="card"><small>Submitted</small><b>'+done+' / '+rows.length+'</b></div><div class="card"><small>Opened, not submitted</small><b>'+opened+'</b></div><div class="card"><small>Not opened</small><b>'+none+'</b></div><div class="card"><small>Deadline</small><b style="font-size:20px">'+esc((rows[0]&&rows[0].return_by||'').split('-').reverse().join('/'))+'</b></div></div>'
+    '<div class="cards"><div class="card"><small>Submitted</small><b>'+done+' / '+real.length+'</b></div><div class="card"><small>Opened, not submitted</small><b>'+opened+'</b></div><div class="card"><small>Not opened</small><b>'+none+'</b></div><div class="card"><small>Deadline</small><b style="font-size:20px">'+esc((rows[0]&&rows[0].return_by||'').split('-').reverse().join('/'))+'</b></div></div>'
     +'<div class="bar"><button id="chase">Copy chase list</button><button class="alt" id="csv">Copy results (CSV)</button><span class="muted" id="note">Refreshes every 30 seconds.</span></div>'
     +'<table><tr><th>Route</th><th>Driver</th><th>Status</th><th class="hide-sm">Opened</th><th>Submitted</th><th>Link</th></tr>'+body+'</table>';
   document.querySelectorAll('[data-copy]').forEach(b=>b.addEventListener('click',()=>copy(linkFor(b.dataset.copy),'Link copied')));
   document.getElementById('chase').addEventListener('click',()=>{
-    const out = rows.filter(r=>!r.submitted_at).map(r=>'Route '+r.route+' '+r.driver_name+' ('+(r.opened_at?'opened, not submitted':'not opened')+')');
+    const out = real.filter(r=>!r.submitted_at).map(r=>'Route '+r.route+' '+r.driver_name+' ('+(r.opened_at?'opened, not submitted':'not opened')+')');
     copy(out.length?('Outstanding:\n'+out.join('\n')):'All 13 routes have submitted.','Chase list copied');
   });
   document.getElementById('csv').addEventListener('click',()=>{
