@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow">
+<title>KBAN | Send route packs</title>
+<style>
+:root{--navy:#254159;--steel:#3E6993;--band:#F4F7FA;--rule:#D5DEE7;--muted:#5C6B7A;--ok:#1B7A3E;--err:#B3261E}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#1c2733;font-size:15px}.wrap{max-width:980px;margin:0 auto;padding:16px}
+.top{display:flex;justify-content:space-between;align-items:flex-start}.logo{width:170px}h1{color:var(--navy);margin:6px 0 2px;font-size:24px}.sub{color:var(--muted);margin:0 0 14px}
+table{width:100%;border-collapse:collapse;margin-top:10px}th{background:var(--navy);color:#fff;text-align:left;padding:9px;font-size:13px}td{padding:9px;border-bottom:1px solid var(--rule)}tr:nth-child(even) td{background:var(--band)}
+button{font:inherit;font-size:14px;font-weight:bold;background:var(--navy);color:#fff;border:0;border-radius:6px;padding:9px 14px;cursor:pointer}button.alt{background:#fff;color:var(--navy);border:1px solid var(--navy)}button:disabled{opacity:.5;cursor:default}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0;align-items:center}.muted{color:var(--muted);font-size:13px}.ok{color:var(--ok);font-weight:bold}.bad{color:var(--err);font-weight:bold}
+.box{background:var(--band);border:1px solid var(--rule);border-radius:8px;padding:12px;margin:10px 0}
+</style></head><body><div class="wrap">
+<div class="top"><div><h1>Send route packs</h1><p class="sub">FedEx Preston. Sent from KBAN Ops, replies go to Junior.</p></div><img class="logo" src="/kban-logo.jpg" alt="KBAN Logistics"></div>
+<div class="box"><b>1.</b> Choose the 13 pack PDFs (Route_470 to Route_482). <input type="file" id="files" accept="application/pdf" multiple></div>
+<div id="app"></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+const SUPABASE_URL='https://eacaudjkppyhpsjzoakv.supabase.co';
+const SUPABASE_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhY2F1ZGprcHB5aHBzanpvYWt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1NDYwNzYsImV4cCI6MjA5ODEyMjA3Nn0.oxPp4xwKyt7MjeefQiC8zKApzwydlqst_GY1WyLVmxU';
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let rows=[],pdfs={},session=null;
+(async()=>{const r=await sb.auth.getSession();session=r.data.session;if(!session){location.replace('/login.html');return;}
+ const {data}=await sb.from('route_confirmations').select('route,driver_name,email,wave').lt('route',900).order('route');rows=data||[];render();})();
+document.getElementById('files').addEventListener('change',async e=>{
+ pdfs={};for(const f of e.target.files){const m=/Route_(\d{3})_/i.exec(f.name);if(!m)continue;
+  const buf=new Uint8Array(await f.arrayBuffer());let s='';for(let i=0;i<buf.length;i+=0x8000)s+=String.fromCharCode.apply(null,buf.subarray(i,i+0x8000));pdfs[+m[1]]=btoa(s);}
+ render();});
+function render(){
+ const have=rows.filter(r=>pdfs[r.route]).length;
+ let h='<div class="bar"><button id="t" '+(have?'':'disabled')+' class="alt">2. Send a test to me (first route)</button><button id="a" '+(have===rows.length&&rows.length?'':'disabled')+'>3. Send to all '+rows.length+' drivers</button><span class="muted" id="msg">'+have+' of '+rows.length+' packs matched</span></div>';
+ h+='<table><tr><th>Route</th><th>Driver</th><th>Email</th><th>Pack</th><th>Status</th></tr>'+rows.map(r=>'<tr><td>'+r.route+'</td><td>'+esc(r.driver_name)+'</td><td>'+esc(r.email)+'</td><td>'+(pdfs[r.route]?'<span class="ok">Ready</span>':'<span class="bad">Missing</span>')+'</td><td id="s'+r.route+'"></td></tr>').join('')+'</table>';
+ document.getElementById('app').innerHTML=h;
+ const t=document.getElementById('t'),a=document.getElementById('a');
+ if(t)t.onclick=async()=>{const r=rows.find(x=>pdfs[x.route]);if(r){t.disabled=true;await send(r,true);t.disabled=false;}};
+ if(a)a.onclick=async()=>{if(!confirm('Send the pack and personal link to all '+rows.length+' drivers now from KBAN Ops?'))return;a.disabled=true;for(const r of rows){await send(r,false);}document.getElementById('msg').textContent='Finished.';};
+}
+async function send(r,test){
+ const el=document.getElementById('s'+r.route);el.textContent='Sending...';
+ try{const res=await fetch('/api/send-route-pack',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:JSON.stringify({route:r.route,pdf:pdfs[r.route],test})});
+  const j=await res.json().catch(()=>({}));
+  el.innerHTML=res.ok?'<span class="ok">'+(test?'Test sent to you':'Sent')+'</span>':'<span class="bad">'+esc(j.error||'Failed')+'</span>';
+ }catch(e){el.innerHTML='<span class="bad">Failed</span>';}
+}
+</script></body></html>
