@@ -59,7 +59,7 @@ module.exports = async (req, res) => {
       + ul(['You are responsible for the whole route and area, including all daily, scheduled and ad hoc collections.',
             'Collect inside the window only. Windows can change, so always check the window on your scanner on the day.',
             'Cut off times are in section 3 of your pack.'])
-      + '<p>Please complete the form by 16/11/2026. Junior will speak to you on site to confirm you have it.</p>'
+      + '<p>Please complete the form by 16/11/2026. Junior will speak to you on site to confirm you have it. If you have any queries, Paul and Wayne Jnr will be on site tomorrow.</p>'
       + '<p>Kind regards,<br>KBAN Logistics Operations</p></div>';
 
     const filename = 'Route_' + route + '_' + String(d.driver_name || 'Driver').trim().replace(/[^A-Za-z0-9]+/g, '_') + '_Driver_Pack.pdf';
@@ -69,7 +69,7 @@ module.exports = async (req, res) => {
       body: JSON.stringify({
         from: 'KBAN Ops <ops@send.kbanlogistics.co.uk>',
         to: [to],
-        reply_to: 'WayneJnr@kbanlogistics.co.uk',
+        reply_to: ['WayneJnr@kbanlogistics.co.uk', 'paul@kbanlogistics.co.uk'],
         subject: (b.test ? '[TEST] ' : '') + 'Your FedEx Preston route from 23/11/2026 and action required',
         html,
         attachments: [{ filename, content: pdf }],
