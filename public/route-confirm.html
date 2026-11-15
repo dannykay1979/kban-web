@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>KBAN Logistics | Route confirmation</title>
+<style>
+:root{--navy:#254159;--steel:#3E6993;--sky:#5795C8;--tint:#EAF1F8;--band:#F4F7FA;--rule:#D5DEE7;--muted:#5C6B7A;--ok:#1B7A3E;--err:#B3261E}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:#1c2733;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.45}
+.wrap{max-width:720px;margin:0 auto;padding:16px}
+.logo{display:block;margin-left:auto;width:170px;height:auto}
+h1{color:var(--navy);font-size:26px;margin:10px 0 2px}
+.sub{color:var(--steel);font-weight:bold;margin:0 0 14px}
+h2{color:var(--navy);font-size:19px;margin:26px 0 8px;border-bottom:2px solid var(--navy);padding-bottom:4px}
+p{margin:8px 0}
+.facts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.fact{background:var(--band);border:1px solid var(--rule);border-radius:6px;padding:8px 10px}
+.fact small{display:block;color:var(--muted);font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+.fact b{color:var(--navy)}
+.van{display:flex;gap:14px;align-items:stretch;margin:10px 0}
+.vanbox{width:96px;flex:none;border:2px solid var(--navy);border-radius:10px;overflow:hidden;text-align:center;color:var(--navy);font-weight:bold}
+.vanbox div{padding:12px 0}
+.vanbox .cab{background:var(--tint);font-size:12px;padding:16px 0}
+.vanbox .pos{font-size:24px;border-top:1px solid var(--navy)}
+.vanbox .pos:nth-child(even){background:var(--band)}
+.vanbox .rear{font-size:10px;color:var(--muted);border-top:1px solid var(--navy);padding:6px 0;font-weight:normal}
+.how{font-size:14px}
+.how li{margin-bottom:4px}
+.sector{border:1px solid var(--rule);border-radius:8px;padding:12px;margin:10px 0}
+.sector .head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.sector .head b{font-size:18px;color:var(--navy)}
+.sector .head span{color:var(--muted);font-size:13px}
+.lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:10px 0 4px}
+.pos4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.pos4 input{position:absolute;opacity:0;pointer-events:none}
+.pos4 label{display:block;text-align:center;border:2px solid var(--rule);border-radius:8px;padding:12px 0;font-weight:bold;font-size:18px;color:var(--navy);cursor:pointer;background:#fff;user-select:none}
+.pos4 input:checked+label{background:var(--navy);border-color:var(--navy);color:#fff}
+.pos4 input:focus-visible+label{outline:3px solid var(--sky)}
+select,textarea,input[type=text]{width:100%;font:inherit;padding:11px;border:2px solid var(--rule);border-radius:8px;background:#fff}
+textarea{min-height:90px;resize:vertical}
+.chk{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--rule)}
+.chk input{width:26px;height:26px;flex:none;margin-top:1px;accent-color:var(--navy)}
+.chk label{cursor:pointer}
+button{font:inherit;font-weight:bold;background:var(--navy);color:#fff;border:0;border-radius:8px;padding:15px 18px;width:100%;margin-top:18px;cursor:pointer}
+button.alt{background:#fff;color:var(--navy);border:2px solid var(--navy)}
+button:disabled{opacity:.55;cursor:default}
+.msg{padding:12px;border-radius:8px;margin:14px 0}
+.msg.err{background:#FDECEA;color:var(--err);border:1px solid #F3B7B2}
+.msg.ok{background:#E8F5EC;color:var(--ok);border:1px solid #B5DEC1}
+.err-inline{color:var(--err);font-size:14px;margin-top:6px;display:none}
+table{width:100%;border-collapse:collapse;margin:8px 0;font-size:15px}
+th{background:var(--navy);color:#fff;text-align:left;padding:8px}
+td{padding:8px;border-bottom:1px solid var(--rule)}
+.foot{color:var(--muted);font-size:12px;margin:28px 0 8px}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+<img class="logo" src="/kban-logo.jpg" alt="KBAN Logistics">
+<div id="state"><p>Loading your route&hellip;</p></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+const SUPABASE_URL = 'https://eacaudjkppyhpsjzoakv.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhY2F1ZGprcHB5aHBzanpvYWt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1NDYwNzYsImV4cCI6MjA5ODEyMjA3Nn0.oxPp4xwKyt7MjeefQiC8zKApzwydlqst_GY1WyLVmxU';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {auth:{persistSession:false,autoRefreshToken:false}});
+const token = new URLSearchParams(location.search).get('t') || '';
+const $ = id => document.getElementById(id);
+const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ukDate = iso => { if(!iso) return ''; const d=new Date(iso); return d.toLocaleDateString('en-GB')+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}); };
+const ukDay = iso => iso ? iso.split('-').reverse().join('/') : '';
+let R = null;
+
+function fail(text){ $('state').innerHTML = '<div class="msg err">'+esc(text)+'</div>'; }
+
+async function load(){
+  if (token.length < 16) return fail('This link is not valid. Please use the link in your email from KBAN, or speak to Junior on site.');
+  const {data, error} = await sb.rpc('get_route_confirmation', {p_token: token});
+  if (error || !data) return fail('This link is not valid. Please use the link in your email from KBAN, or speak to Junior on site.');
+  R = data;
+  R.sectors = (R.sectors||[]).map(s => ({sector:s.sector, stops:s.stops}));
+  if (R.submitted_at) renderDone(); else renderForm();
+}
+
+function renderForm(){
+  const prev = {}; (R.load_plan||[]).forEach(p => prev[p.sector] = p);
+  const n = R.sectors.length;
+  const orderOpts = sel => '<option value="">Choose</option>' + Array.from({length:n},(_,i)=>'<option value="'+(i+1)+'"'+(String(sel)===String(i+1)?' selected':'')+'>'+(i+1)+(i===0?' (first)':i===n-1?' (last)':'')+'</option>').join('');
+  const sectorsHtml = R.sectors.map((s,i) => {
+    const pv = prev[s.sector] || {};
+    return '<div class="sector" data-sector="'+esc(s.sector)+'">'
+      +'<div class="head"><b>'+esc(s.sector)+'</b><span>about '+esc(s.stops)+' stops a day</span></div>'
+      +'<div class="lbl">Load position</div>'
+      +'<div class="pos4">'+[1,2,3,4].map(p=>'<span><input type="radio" name="pos'+i+'" id="p'+i+'_'+p+'" value="'+p+'"'+(pv.position===p?' checked':'')+'><label for="p'+i+'_'+p+'">'+p+'</label></span>').join('')+'</div>'
+      +'<div class="lbl">Your drop order for this sector (1 to '+n+')</div>'
+      +'<select name="ord'+i+'">'+orderOpts(pv.order)+'</select>'
+      +'</div>';
+  }).join('');
+  $('state').innerHTML =
+    '<h1>Route '+esc(R.route)+'</h1><p class="sub">'+esc(R.driver_name)+'</p>'
+   +'<div class="facts">'
+   +'<div class="fact"><small>Start date</small><b>23/11/2026</b></div>'
+   +'<div class="fact"><small>Start time (wave)</small><b>'+esc(R.wave)+'</b></div>'
+   +'<div class="fact"><small>Area</small><b>'+esc(R.area)+'</b></div>'
+   +'<div class="fact"><small>Return by</small><b>'+esc(ukDay(R.return_by))+'</b></div></div>'
+   +'<p>Please read your driver pack (PDF attached to the email) first. Then complete the two sections below and submit. It takes about five minutes.</p>'
+   +'<h2>1. How you want your van loaded</h2>'
+   +'<div class="van"><div class="vanbox"><div class="cab">CAB</div><div class="pos">1</div><div class="pos">2</div><div class="pos">3</div><div class="pos">4</div><div class="rear">REAR DOORS</div></div>'
+   +'<ul class="how"><li>Position 1 is nearest the cab. Position 4 is nearest the rear doors.</li><li>Choose a position for every postcode sector on your route.</li><li>More than one sector can share a position.</li><li>Then put your sectors in the order you want to drop them, 1 to '+n+'. Each number can only be used once.</li></ul></div>'
+   +sectorsHtml
+   +'<div class="err-inline" id="planErr"></div>'
+   +'<div class="lbl">Anything else about how you want your freight loaded or presented (optional)</div>'
+   +'<textarea id="notes" maxlength="1000">'+esc(R.notes||'')+'</textarea>'
+   +'<h2>2. Confirmation</h2>'
+   +'<div class="chk"><input type="checkbox" id="a1"><label for="a1">I have read my driver pack and I understand my route, my postcode sectors and my start time.</label></div>'
+   +'<div class="chk"><input type="checkbox" id="a2"><label for="a2">I have chosen my load positions and drop order above.</label></div>'
+   +'<div class="chk"><input type="checkbox" id="a3"><label for="a3">I understand I am responsible for all deliveries and collections on my route, including ad hoc collections, collection windows and the cut off times in my pack.</label></div>'
+   +'<div class="lbl">Type your full name to sign</div>'
+   +'<input type="text" id="signed" autocomplete="name" placeholder="Full name" value="'+esc(R.signed_name||'')+'">'
+   +'<div class="err-inline" id="subErr"></div>'
+   +'<button id="submit">Submit my confirmation</button>'
+   +'<p class="foot">Start dates depend on FedEx completing their system changes. If the date moves, KBAN will tell you straight away. KBAN Logistics Ltd.</p>';
+  $('submit').addEventListener('click', submit);
+}
+
+function collect(){
+  const plan = []; const orders = new Set(); let problem = '';
+  document.querySelectorAll('.sector').forEach((el,i)=>{
+    const sector = el.dataset.sector;
+    const pos = el.querySelector('input[type=radio]:checked');
+    const ord = el.querySelector('select').value;
+    if(!pos) problem = problem || 'Choose a load position for '+sector+'.';
+    else if(!ord) problem = problem || 'Choose a drop order for '+sector+'.';
+    else if(orders.has(ord)) problem = problem || 'Each drop order number can only be used once. Check '+sector+'.';
+    orders.add(ord);
+    plan.push({sector, position: pos?Number(pos.value):null, order: ord?Number(ord):null});
+  });
+  return {plan, problem};
+}
+
+async function submit(){
+  const {plan, problem} = collect();
+  $('planErr').style.display='none'; $('subErr').style.display='none';
+  if(problem){ $('planErr').textContent=problem; $('planErr').style.display='block'; $('planErr').scrollIntoView({behavior:'smooth',block:'center'}); return; }
+  const acks = [$('a1').checked,$('a2').checked,$('a3').checked];
+  const signed = $('signed').value.trim();
+  if(!acks.every(Boolean)){ $('subErr').textContent='Please tick all three confirmations.'; $('subErr').style.display='block'; return; }
+  if(signed.length < 3){ $('subErr').textContent='Please type your full name to sign.'; $('subErr').style.display='block'; return; }
+  const btn = $('submit'); btn.disabled = true; btn.textContent = 'Submitting…';
+  const {data, error} = await sb.rpc('submit_route_confirmation', {p_token: token, p_acks: acks, p_load_plan: plan, p_notes: $('notes').value, p_signed_name: signed});
+  if(error || !data || !data.ok){
+    btn.disabled=false; btn.textContent='Submit my confirmation';
+    $('subErr').textContent='That did not send. Check your signal and try again. If it keeps failing, tell Junior on site.'; $('subErr').style.display='block'; return;
+  }
+  R.load_plan = plan; R.notes = $('notes').value; R.signed_name = signed; R.submitted_at = data.submitted_at;
+  renderDone(true);
+  window.scrollTo(0,0);
+}
+
+function renderDone(justNow){
+  const rows = (R.load_plan||[]).slice().sort((a,b)=>a.order-b.order).map(p=>'<tr><td>'+esc(p.order)+'</td><td><b>'+esc(p.sector)+'</b></td><td>Position '+esc(p.position)+'</td></tr>').join('');
+  $('state').innerHTML =
+    '<h1>Route '+esc(R.route)+'</h1><p class="sub">'+esc(R.driver_name)+'</p>'
+   +'<div class="msg ok"><b>Thank you. Your confirmation has been received.</b><br>Submitted '+esc(ukDate(R.submitted_at))+'. Signed: '+esc(R.signed_name)+'.</div>'
+   +'<h2>Your load plan</h2>'
+   +'<table><tr><th>Drop order</th><th>Sector</th><th>Van position</th></tr>'+rows+'</table>'
+   +(R.notes?'<p><b>Your notes:</b> '+esc(R.notes)+'</p>':'')
+   +'<p>Start: <b>23/11/2026</b>, '+esc(R.wave)+' wave. Report to Junior at the bay each day.</p>'
+   +'<button class="alt" id="edit">Change my answers</button>'
+   +'<p class="foot">KBAN Logistics Ltd.</p>';
+  $('edit').addEventListener('click', ()=>{ R.submitted_at=null; renderForm(); window.scrollTo(0,0); });
+}
+load();
+</script>
+</body>
+</html>

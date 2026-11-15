@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>KBAN | Route confirmation tracker</title>
+<style>
+:root{--navy:#254159;--steel:#3E6993;--tint:#EAF1F8;--band:#F4F7FA;--rule:#D5DEE7;--muted:#5C6B7A;--ok:#1B7A3E;--amber:#B26A00;--err:#B3261E}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#1c2733;background:#fff;font-size:15px}
+.wrap{max-width:1100px;margin:0 auto;padding:16px}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.logo{width:170px;height:auto}
+h1{color:var(--navy);margin:6px 0 2px;font-size:24px}
+.sub{color:var(--muted);margin:0 0 14px}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}
+.card{background:var(--band);border:1px solid var(--rule);border-radius:8px;padding:10px 12px}
+.card small{display:block;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.card b{font-size:26px;color:var(--navy)}
+table{width:100%;border-collapse:collapse;margin-top:8px}
+th{background:var(--navy);color:#fff;text-align:left;padding:9px;font-size:13px;white-space:nowrap}
+td{padding:9px;border-bottom:1px solid var(--rule);vertical-align:top}
+tr:nth-child(even) td{background:var(--band)}
+.pill{display:inline-block;padding:3px 9px;border-radius:99px;font-size:12px;font-weight:bold;white-space:nowrap}
+.pill.done{background:#E8F5EC;color:var(--ok)}
+.pill.opened{background:#FFF3DC;color:var(--amber)}
+.pill.none{background:#FDECEA;color:var(--err)}
+button{font:inherit;font-size:13px;font-weight:bold;background:var(--navy);color:#fff;border:0;border-radius:6px;padding:7px 11px;cursor:pointer}
+button.alt{background:#fff;color:var(--navy);border:1px solid var(--navy)}
+.plan{font-size:13px;color:#333;margin-top:4px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.muted{color:var(--muted);font-size:13px}
+.err{background:#FDECEA;color:var(--err);padding:12px;border-radius:8px}
+details summary{cursor:pointer;color:var(--steel);font-size:13px}
+@media(max-width:760px){.cards{grid-template-columns:repeat(2,1fr)}.hide-sm{display:none}table{font-size:13px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="top"><div><h1>Route confirmation tracker</h1><p class="sub">FedEx Preston, 13 routes, going live 23/11/2026</p></div><img class="logo" src="/kban-logo.jpg" alt="KBAN Logistics"></div>
+<div id="app"><p class="muted">Loading&hellip;</p></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+const SUPABASE_URL = 'https://eacaudjkppyhpsjzoakv.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhY2F1ZGprcHB5aHBzanpvYWt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1NDYwNzYsImV4cCI6MjA5ODEyMjA3Nn0.oxPp4xwKyt7MjeefQiC8zKApzwydlqst_GY1WyLVmxU';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const when = iso => { if(!iso) return '<span class="muted">Not yet</span>'; const d=new Date(iso); return d.toLocaleDateString('en-GB')+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}); };
+let rows = [];
+const linkFor = t => location.origin + '/route-confirm.html?t=' + t;
+
+async function init(){
+  const {data:{session}} = await sb.auth.getSession();
+  if(!session){ location.replace('/login.html'); return; }
+  await refresh(); setInterval(refresh, 30000);
+}
+async function refresh(){
+  const {data, error} = await sb.from('route_confirmations').select('*').order('route');
+  if(error){ document.getElementById('app').innerHTML='<div class="err">Could not load the tracker. '+esc(error.message)+'</div>'; return; }
+  rows = data||[]; render();
+}
+function status(r){ return r.submitted_at ? 'done' : r.opened_at ? 'opened' : 'none'; }
+function render(){
+  const done = rows.filter(r=>r.submitted_at).length, opened = rows.filter(r=>!r.submitted_at && r.opened_at).length, none = rows.length-done-opened;
+  const body = rows.map(r=>{
+    const st = status(r);
+    const plan = (r.load_plan||[]).slice().sort((a,b)=>a.order-b.order);
+    const planHtml = plan.length ? '<details><summary>Load plan</summary><div class="plan">'+plan.map(p=>esc(p.order)+'. <b>'+esc(p.sector)+'</b> position '+esc(p.position)).join('<br>')+(r.notes?'<br><i>Notes: '+esc(r.notes)+'</i>':'')+'</div></details>' : '';
+    return '<tr><td><b>'+esc(r.route)+'</b></td><td>'+esc(r.driver_name)+'<div class="muted hide-sm">'+esc(r.email||'')+'</div></td>'
+      +'<td><span class="pill '+st+'">'+(st==='done'?'Submitted':st==='opened'?'Opened, not submitted':'Not opened')+'</span></td>'
+      +'<td class="hide-sm">'+when(r.opened_at)+'</td><td>'+when(r.submitted_at)+(r.revisions>1?'<div class="muted">Changed '+(r.revisions-1)+'x</div>':'')+planHtml+'</td>'
+      +'<td><button class="alt" data-copy="'+esc(r.token)+'">Copy link</button></td></tr>';
+  }).join('');
+  document.getElementById('app').innerHTML =
+    '<div class="cards"><div class="card"><small>Submitted</small><b>'+done+' / '+rows.length+'</b></div><div class="card"><small>Opened, not submitted</small><b>'+opened+'</b></div><div class="card"><small>Not opened</small><b>'+none+'</b></div><div class="card"><small>Deadline</small><b style="font-size:20px">'+esc((rows[0]&&rows[0].return_by||'').split('-').reverse().join('/'))+'</b></div></div>'
+    +'<div class="bar"><button id="chase">Copy chase list</button><button class="alt" id="csv">Copy results (CSV)</button><span class="muted" id="note">Refreshes every 30 seconds.</span></div>'
+    +'<table><tr><th>Route</th><th>Driver</th><th>Status</th><th class="hide-sm">Opened</th><th>Submitted</th><th>Link</th></tr>'+body+'</table>';
+  document.querySelectorAll('[data-copy]').forEach(b=>b.addEventListener('click',()=>copy(linkFor(b.dataset.copy),'Link copied')));
+  document.getElementById('chase').addEventListener('click',()=>{
+    const out = rows.filter(r=>!r.submitted_at).map(r=>'Route '+r.route+' '+r.driver_name+' ('+(r.opened_at?'opened, not submitted':'not opened')+')');
+    copy(out.length?('Outstanding:\n'+out.join('\n')):'All 13 routes have submitted.','Chase list copied');
+  });
+  document.getElementById('csv').addEventListener('click',()=>{
+    const q = v => '"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+    const head = ['Route','Driver','Status','Opened','Submitted','Load plan (order:sector:position)','Notes'];
+    const lines = rows.map(r=>[r.route,r.driver_name,status(r),r.opened_at||'',r.submitted_at||'',(r.load_plan||[]).slice().sort((a,b)=>a.order-b.order).map(p=>p.order+':'+p.sector+':'+p.position).join(' | '),r.notes||''].map(q).join(','));
+    copy([head.map(q).join(',')].concat(lines).join('\n'),'CSV copied');
+  });
+}
+async function copy(text,msg){
+  const n = document.getElementById('note');
+  try { await navigator.clipboard.writeText(text); n.textContent = msg; }
+  catch(e){ window.prompt('Copy this:', text); }
+}
+init();
+</script>
+</body>
+</html>
