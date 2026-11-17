@@ -34,7 +34,10 @@ module.exports = async (req, res) => {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(d.email || ''))) return res.status(400).json({ error: 'No valid email for route ' + route });
 
     // Test mode: send to the signed in user only, never to the driver.
-    const to = b.test ? userEmail : d.email;
+    const override = String(b.email || '').trim();
+    const okMail = x => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x);
+    if (override && !okMail(override)) return res.status(400).json({ error: 'Invalid email address' });
+    const to = b.test ? userEmail : (override || d.email);
     const first = String(d.driver_name || '').trim().split(/\s+/)[0] || 'there';
     const link = 'https://kban-web.vercel.app/route-confirm.html?t=' + encodeURIComponent(d.token);
     const wave = String(d.wave || '').slice(0, 5);

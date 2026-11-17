@@ -30,15 +30,17 @@ document.getElementById('files').addEventListener('change',async e=>{
 function render(){
  const have=rows.filter(r=>pdfs[r.route]).length;
  let h='<div class="bar"><button id="t" '+(have?'':'disabled')+' class="alt">2. Send a test to me (first route)</button><button id="a" '+(have===rows.length&&rows.length?'':'disabled')+'>3. Send to all '+rows.length+' drivers</button><span class="muted" id="msg">'+have+' of '+rows.length+' packs matched</span></div>';
- h+='<table><tr><th>Route</th><th>Driver</th><th>Email</th><th>Pack</th><th>Status</th></tr>'+rows.map(r=>'<tr><td>'+r.route+'</td><td>'+esc(r.driver_name)+'</td><td>'+esc(r.email)+'</td><td>'+(pdfs[r.route]?'<span class="ok">Ready</span>':'<span class="bad">Missing</span>')+'</td><td id="s'+r.route+'"></td></tr>').join('')+'</table>';
+ h+='<table><tr><th>Route</th><th>Driver</th><th>Email</th><th>Pack</th><th>Status</th><th>Resend to one driver</th></tr>'+rows.map(r=>'<tr><td>'+r.route+'</td><td>'+esc(r.driver_name)+'</td><td>'+esc(r.email)+'</td><td>'+(pdfs[r.route]?'<span class="ok">Ready</span>':'<span class="bad">Missing</span>')+'</td><td id="s'+r.route+'"></td></tr>').join('')+'</table>';
  document.getElementById('app').innerHTML=h;
+ document.querySelectorAll('button[data-r]').forEach(b=>b.onclick=async()=>{const r=rows.find(x=>x.route==b.dataset.r),o=document.getElementById('e'+r.route).value.trim();
+  if(!confirm('Resend the pack to '+r.driver_name+' at '+(o||r.email)+'?'))return;b.disabled=true;await send(r,false,o);b.disabled=false;});
  const t=document.getElementById('t'),a=document.getElementById('a');
  if(t)t.onclick=async()=>{const r=rows.find(x=>pdfs[x.route]);if(r){t.disabled=true;await send(r,true);t.disabled=false;}};
  if(a)a.onclick=async()=>{if(!confirm('Send the pack and personal link to all '+rows.length+' drivers now from KBAN Ops?'))return;a.disabled=true;for(const r of rows){await send(r,false);}document.getElementById('msg').textContent='Finished.';};
 }
-async function send(r,test){
+async function send(r,test,email){
  const el=document.getElementById('s'+r.route);el.textContent='Sending...';
- try{const res=await fetch('/api/send-route-pack',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:JSON.stringify({route:r.route,pdf:pdfs[r.route],test})});
+ try{const res=await fetch('/api/send-route-pack',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:JSON.stringify({route:r.route,pdf:pdfs[r.route],test,email:email||undefined})});
   const j=await res.json().catch(()=>({}));
   el.innerHTML=res.ok?'<span class="ok">'+(test?'Test sent to you':'Sent')+'</span>':'<span class="bad">'+esc(j.error||'Failed')+'</span>';
  }catch(e){el.innerHTML='<span class="bad">Failed</span>';}
